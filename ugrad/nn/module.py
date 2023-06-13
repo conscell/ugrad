@@ -9,6 +9,7 @@ class Module:
         """
         self._parameters = {}
         self._modules = {}
+        self.training = True
 
     def __setattr__(self, name, value):
         """
@@ -51,6 +52,30 @@ class Module:
         """
         return self.forward(*args, **kwargs)
     
+    def train(self, mode=True):
+        """
+        Sets the module and its submodules into training mode.
+
+        Args:
+            mode: If True the module and its submodules are set into training mode,
+                  otherwise they are set into evaluation mode (default: True).
+
+        Returns:
+            Module itself.
+        """
+        self.training = mode
+        for module in self.modules():
+            module.train(mode)
+        return self
+
+    def eval(self):
+        """Sets the module  and its submodules into evaluation mode.
+
+        Returns:
+            Module itself.
+        """
+        return self.train(False)
+
     def forward(self, *args, **kwargs):
         """
         Performs the forward pass through the module.
