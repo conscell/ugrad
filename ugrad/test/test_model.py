@@ -48,8 +48,6 @@ def test_model():
     optimizerT = torch.optim.SGD(modelT.parameters(), lr=1e-2, weight_decay=1e-3)
     schedulerT = torch.optim.lr_scheduler.LinearLR(optimizerT, start_factor=1.0, end_factor=0.5, total_iters=100)
 
-    loss_fn = torch.nn.BCELoss()
-
     tol = 1e-6
 
     for i in range(1000):
@@ -58,6 +56,7 @@ def test_model():
         loss = ugrad.nn.functional.binary_cross_entropy(y_hat, y)
         lossT = torch.nn.functional.binary_cross_entropy(y_hatT, yT)
         assert abs(loss.data - lossT.data.item()) < tol
+        assert abs(optimizer.lr - optimizerT.param_groups[0]['lr']) < tol
         loss.backward()
         lossT.backward()
         optimizer.step()
