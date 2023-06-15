@@ -1,2 +1,2 @@
-from .optimizer import Optimizer, SGD
+from .optimizer import Optimizer, SGD, Adam
 from . import lr_scheduler
