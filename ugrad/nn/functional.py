@@ -29,12 +29,16 @@ def log_softmax(input, dim=-1):
     return input.log_softmax(dim=dim)
 
 
+def nll_loss(input, target):
+    return -(input * target).sum() / target.shape[0]
+
+
 def binary_cross_entropy(input, target):
     return -(target * input.log() + (1 - target) * (1 - input).log()).sum() / target.shape[0]
 
 
-def nll_loss(input, target):
-    return -(input * target).sum() / target.shape[0]
+def cross_entropy(input, target):
+    return nll_loss(log_softmax(input, dim=-1), Tensor(np.eye(input.shape[-1])[target]))
 
 
 def dropout(input, p=0.5, training=True):
