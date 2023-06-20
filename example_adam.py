@@ -24,8 +24,8 @@ def main():
     print(f"{X_train.shape=} {X_test.shape=} {y_train.shape=} {y_test.shape=}")
 
     inputs_t = ugrad.Tensor(X_test)
-    labels_t = ugrad.Tensor(np.eye(10)[y_test])
-    print(f"{labels_t.data[0]=}")
+    labels_t = np.array(y_test)
+    print(f"{labels_t[0]=}")
 
     class Model(nn.Module):
         def __init__(self):
@@ -39,7 +39,7 @@ def main():
             z = F.dropout(z, p=0.5, training=self.training)
             z = F.relu(self.l2(z))
             z = F.dropout(z, p=0.5, training=self.training)
-            out = F.log_softmax(self.l3(z))
+            out = self.l3(z)
             return out
 
     model = Model()
@@ -55,11 +55,11 @@ def main():
         model.train()
         for batch in range(num_batches):
             inputs = ugrad.Tensor(X_train[batch * batch_size:(batch + 1) * batch_size])
-            labels = ugrad.Tensor(np.eye(10)[y_train[batch * batch_size:(batch + 1) * batch_size]])
+            labels = np.array(y_train[batch * batch_size:(batch + 1) * batch_size])
 
             # Forward
             preds = model(inputs)
-            loss = F.nll_loss(preds, labels)
+            loss = F.cross_entropy(preds, labels)
 
             # Backward
             optimizer.zero_grad()
@@ -68,7 +68,7 @@ def main():
             # Update (Adam)
             optimizer.step()
 
-            accuracy += int(np.count_nonzero(np.argmax(preds.data, axis=-1) == np.argmax(labels.data, axis=-1)))
+            accuracy += int(np.count_nonzero(np.argmax(preds.data, axis=-1) == labels))
             train_loss += loss.data.item()
 
         scheduler.step()
@@ -78,9 +78,9 @@ def main():
         model.eval()
         with ugrad.no_grad():
             preds_t = model(inputs_t)
-            loss_t = F.nll_loss(preds_t, labels_t).data.item()
+            loss_t = F.cross_entropy(preds_t, labels_t).data.item()
 
-        accuracy_t = int(np.count_nonzero(np.argmax(preds_t.data, axis=-1) == np.argmax(labels_t.data, axis=-1))) / X_test.shape[0]
+        accuracy_t = int(np.count_nonzero(np.argmax(preds_t.data, axis=-1) == labels_t)) / X_test.shape[0]
 
         print(f"Epoch {k+1} loss {train_loss:.6f}, accuracy {accuracy * 100:.6f}%  test loss {loss_t:.6f}, test accuracy {accuracy_t * 100:.6f}% lr {optimizer.lr:.6f}")
 
