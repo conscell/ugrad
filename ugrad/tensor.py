@@ -378,6 +378,22 @@ class Tensor:
         result.name = "log_softmax"
         return result
     
+    def softmax(self, dim=-1):
+        """
+        Applies a softmax function.
+
+        Args:
+            dim: The dimension along which to compute the softmax (default: -1).
+
+        Returns:
+            The resulting Tensor object after applying the softmax function.
+        """
+        logits_off = self - np.max(self.data)
+        logits_off_exp = logits_off.exp()
+        result = logits_off_exp / logits_off_exp.sum(dim=dim, keepdim=True)
+        result.name = "softmax"
+        return result
+    
     # Other operations
     def __neg__(self):
         return self * (-1)

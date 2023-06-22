@@ -527,3 +527,64 @@ def test_log_softmax_celoss():
     assert (np.abs(xut.grad - xpt.grad.numpy()) < tol).all()
     assert (np.abs(yut.grad - ypt.grad.numpy()) < tol).all()
 
+
+def test_softmax():
+    xx = np.array([[1., 2., 3., 3., 2., 1., 0.], [2.0, 2.5, -3., -3., 2.5, 1.0, 0.]])
+    yy = np.array([[0., 0., 1., 1., 0., 0., 0.], [1., 1., 0., 0., 1., 0., 0.]])
+
+    x = ugrad.Tensor(xx, requires_grad=True)
+    y = ugrad.Tensor(yy, requires_grad=True)
+
+    y_hat = x.softmax(dim=1)
+    l = -(y * y_hat.log()).sum()
+    l.backward()
+
+    xut, yut, y_hatut, lut = x, y, y_hat, l
+
+    x = torch.tensor(xx, requires_grad=True, dtype=torch.float64)
+    y = torch.tensor(yy, requires_grad=True, dtype=torch.float64)
+
+    y_hat = x.softmax(dim=1)
+    l = -(y * y_hat.log()).sum()
+    l.backward()
+
+    xpt, ypt, y_hatpt, lpt = x, y, y_hat, l
+
+    tol = 1e-6
+    # forward
+    assert (np.abs(lut.data - lpt.data.numpy()) < tol).all()
+    assert (np.abs(y_hatut.data - y_hatpt.data.numpy()) < tol).all()
+
+    # backward
+    assert (np.abs(xut.grad - xpt.grad.numpy()) < tol).all()
+    assert (np.abs(yut.grad - ypt.grad.numpy()) < tol).all()
+
+
+def test_softmax_celoss():
+    xx = np.array([[1., 2., 3.5, 3., 2., 1., 0.], [2.0, 2.5, -3., -3., 2.5, 1.0, 0.]])
+    yy = np.array([[0., 0., 1., 0., 0., 0., 0.], [0., 0., 0., 0., 1., 0., 0.]])
+
+    x = ugrad.Tensor(xx, requires_grad=True)
+    y = ugrad.Tensor(yy, requires_grad=True)
+
+    y_hat = x.softmax(dim=1)
+    l = -(y * y_hat.log()).sum() / 2
+    l.backward()
+
+    xut, yut, lut = x, y, l
+
+    x = torch.tensor(xx, requires_grad=True, dtype=torch.float64)
+    y = torch.tensor(yy, requires_grad=True, dtype=torch.float64)
+
+    l = torch.nn.functional.cross_entropy(x, y)
+    l.backward()
+
+    xpt, ypt, lpt = x, y, l
+
+    tol = 1e-6
+    # forward
+    assert (np.abs(lut.data - lpt.data.numpy()) < tol).all()
+
+    # backward
+    assert (np.abs(xut.grad - xpt.grad.numpy()) < tol).all()
+    assert (np.abs(yut.grad - ypt.grad.numpy()) < tol).all()
