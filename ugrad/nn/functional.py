@@ -29,6 +29,10 @@ def log_softmax(input, dim=-1):
     return input.log_softmax(dim=dim)
 
 
+def softmax(input, dim=-1):
+    return input.softmax(dim=dim)
+
+
 def nll_loss(input, target):
     return -(input * target).sum() / target.shape[0]
 
