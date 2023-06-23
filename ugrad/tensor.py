@@ -373,7 +373,7 @@ class Tensor:
         Returns:
             The resulting Tensor object after applying the log-softmax function.
         """
-        logits_off = self - np.max(self.data)
+        logits_off = self - np.max(self.data, axis=dim, keepdims=True)
         result = logits_off - logits_off.exp().sum(dim=dim, keepdim=True).log()
         result.name = "log_softmax"
         return result
@@ -388,7 +388,7 @@ class Tensor:
         Returns:
             The resulting Tensor object after applying the softmax function.
         """
-        logits_off = self - np.max(self.data)
+        logits_off = self - np.max(self.data, axis=dim, keepdims=True)
         logits_off_exp = logits_off.exp()
         result = logits_off_exp / logits_off_exp.sum(dim=dim, keepdim=True)
         result.name = "softmax"
