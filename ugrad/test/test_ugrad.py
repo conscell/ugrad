@@ -588,3 +588,38 @@ def test_softmax_celoss():
     # backward
     assert (np.abs(xut.grad - xpt.grad.numpy()) < tol).all()
     assert (np.abs(yut.grad - ypt.grad.numpy()) < tol).all()
+
+
+def test_layer_norm():
+    xx = np.arange(5*2*3).reshape(5, 2, 3) * 1.
+    norm_shape = (2, 3)
+    ww = np.ones(norm_shape)
+    bb = np.zeros(norm_shape)
+
+    x = ugrad.Tensor(xx, requires_grad=True)
+    w = ugrad.Tensor(ww, requires_grad=True)
+    b = ugrad.Tensor(bb, requires_grad=True)
+    y = ugrad.nn.functional.layer_norm(x, norm_shape, w, b)
+    z = y.sum()
+
+    z.backward()
+    xut, wut, but, yut, zut = x, w, b, y, z
+
+    x = torch.tensor(xx, requires_grad=True, dtype=torch.float64)
+    w = torch.tensor(ww, requires_grad=True, dtype=torch.float64)
+    b = torch.tensor(bb, requires_grad=True, dtype=torch.float64)
+    y = torch.nn.functional.layer_norm(x, norm_shape, w, b)
+    z = y.sum()
+    
+    z.backward()
+    xpt, wpt, bpt, ypt, zpt = x, w, b, y, z
+
+    tol = 1e-6
+    # forward
+    assert (np.abs(zut.data - zpt.data.numpy()) < tol).all()
+    assert (np.abs(yut.data - ypt.data.numpy()) < tol).all()
+
+    # backward
+    assert (np.abs(xut.grad - xpt.grad.numpy()) < tol).all()
+    assert (np.abs(wut.grad - wpt.grad.numpy()) < tol).all()
+    assert (np.abs(but.grad - bpt.grad.numpy()) < tol).all()

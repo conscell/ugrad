@@ -59,3 +59,19 @@ def dropout(input, p=0.5, training=True):
         result.requires_grad = True
 
     return result
+
+
+def layer_norm(input, normalized_shape, weight=None, bias=None, eps=1e-05):
+    norm_dim = ()
+    h = 1.
+    for nd, ns in enumerate(reversed(normalized_shape),1):
+        if input.shape[-nd] != ns:
+            raise RuntimeError("Incorrect input shape")
+        norm_dim += (-nd, )
+        h *= ns
+    weight = weight if weight is not None else 1
+    bias = bias if bias is not None else 0
+    inp_zero_mean = input - input.sum(dim=norm_dim, keepdim=True) / h
+    var = (inp_zero_mean ** 2).sum(dim=norm_dim, keepdim=True) / h
+    result = inp_zero_mean / (var + eps) ** 0.5 * weight  + bias
+    return result
