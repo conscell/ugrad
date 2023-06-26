@@ -1,5 +1,6 @@
 from ..init import *
 from ..tensor import Tensor
+from .functional import layer_norm
 
 
 class Module:
@@ -146,3 +147,37 @@ class Linear(Module):
             The result of the forward pass.
         """
         return (inp @ self.weight.T + self.bias)
+
+
+class LayerNorm(Module):
+    """
+    Layer Normalization layer normalizes the outputs of the previous layer.
+
+    Args:
+        normalized_shape: Size or sizes to normalize across.
+        eps: Small float to avoid zero division.
+        name: The name of the Layer Normalization layer (optional).
+    """
+    def __init__(self, normalized_shape, eps=1e-5, name=""):
+        super().__init__()
+        self.normalized_shape = tuple(normalized_shape)
+        self.eps = eps
+        self.weight = Tensor(np.ones(self.normalized_shape),
+                             requires_grad=True,
+                             name="ln_w_" + name)
+        self.bias = Tensor(np.zeros(self.normalized_shape),
+                           requires_grad=True,
+                           name="ln_b_" + name)
+        self.name = name
+
+    def forward(self, inp):
+        """
+        Perform a forward pass through the Layer Normalization.
+
+        Args:
+            inp: The input tensor.
+
+        Returns:
+            The result of the forward pass.
+        """
+        return layer_norm(inp, self.normalized_shape, self.weight, self.bias, self.eps)
