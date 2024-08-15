@@ -20,7 +20,8 @@ class Tensor:
         self.requires_grad = requires_grad
         self.grad, self.grad_fn = (
             (np.zeros_like(self.data), Node(grad_fn=self.accum_grad, 
-                                            next_functions=(), 
+                                            next_functions=(),
+                                            result_size = self.shape,
                                             name="accum")) if requires_grad and self.grad_enabled 
             else (None, None))
     
@@ -32,41 +33,35 @@ class Tensor:
         return ()
     
     @staticmethod
-    def broadcast_axis(shape_left, shape_right):
+    def sum_to_size(x, size):
         """
-        Determine the axes along which broadcasting occurs between two shapes.
+        Sum the input ndarray `x` to the `size`. `size` must be expandable to the size of `x`.
 
         Args:
-            shape_left: Shape of the left tensor.
-            shape_right: Shape of the right tensor.
+            x: Input ndarray.
+            size: Desired shape of the output ndarray.
 
         Returns:
-            A tuple of two tuples representing the axes along which broadcasting occurs.
-        """
-        if shape_left == shape_right:
-            return ((), ())
-        
-        # Determine the maximum number of dimensions between the two shapes
-        left_dim = len(shape_left)
-        right_dim = len(shape_right)
-        result_ndim = max(left_dim, right_dim)
-        
-        # Pad the shapes with 1s to match the maximum number of dimensions
-        left_padded = (1, ) * (result_ndim - left_dim) + shape_left
-        right_padded = (1, ) * (result_ndim - right_dim) + shape_right
-        
-        # Store the axes along which broadcasting occurs
-        left_axes = []
-        right_axes = []
+            The summed result of the input ndarray `x` adjusted to the `size`.
 
-        # Iterate over padded shapes and compare corresponding axes
-        for axis_idx, (left_axis, right_axis) in enumerate(zip(left_padded, right_padded)):
-            if right_axis > left_axis:  # If the right axis is greater, broadcasting occurs for the left tensor
-                left_axes.append(axis_idx)
-            elif left_axis > right_axis:  # Broadcasting occurs for the right tensor
-                right_axes.append(axis_idx)
-        
-        return tuple(left_axes), tuple(right_axes)
+        """
+        x_size = x.shape
+        target_ndim = len(size)
+        if target_ndim > x.ndim:
+            raise RuntimeError(f"size {size} is not expandable to size {x_size}")
+        if target_ndim < x.ndim:
+            pre_axes = range(x.ndim - target_ndim)
+            x = x.sum(tuple(pre_axes))
+        axes = []
+        for i, sz in enumerate(size):
+            if sz != x.shape[i]:
+                if sz == 1:
+                    axes.append(i)
+                else:
+                    raise RuntimeError(f"size {size} is not expandable to size {x_size}")
+        if axes:
+            return x.sum(tuple(axes), keepdims=True)
+        return x
 
     @property
     def T(self):
@@ -82,6 +77,7 @@ class Tensor:
             # Define the gradient function for the transpose operation
             result.grad_fn = Node(grad_fn=lambda grad: (grad.T, ),
                                   next_functions=(self.grad_fn, ),
+                                  result_size = result.shape,
                                   name=".T")
             result.requires_grad = True
         
@@ -100,27 +96,18 @@ class Tensor:
         other_data, other_requires_grad, other_grad_fn = (
             (other.data, other.requires_grad, other.grad_fn) if isinstance(other, Tensor)
             else (other, False, None))
-        other_shape = () if isinstance(other, (int, float)) else other.shape
 
         result = Tensor(self.data + other_data, name="+")
         
         if (self.requires_grad or other_requires_grad) and self.grad_enabled:
-            if self.shape == other_shape:
-                # Gradient function for element-wise addition of tensors with same shape
-                def grad_fn(grad): return (
-                    grad if self.requires_grad else None, 
-                    grad if other_requires_grad else None)
-            else:
-                # Determine the axes along which broadcasting occurs
-                axis_self, axis_other = self.broadcast_axis(self.shape, other_shape)
-                
-                # Define the gradient function for element-wise addition
-                def grad_fn(grad): return (
-                    np.reshape(np.sum(grad, axis=axis_self), self.shape) if self.requires_grad else None,
-                    np.reshape(np.sum(grad, axis=axis_other), other_shape) if other_requires_grad else None)
-                
+            # Gradient function for element-wise addition of tensors with same shape
+            def grad_fn(grad): return (
+                grad if self.requires_grad else None, 
+                grad if other_requires_grad else None)
+
             result.grad_fn = Node(grad_fn=grad_fn,
                                   next_functions=(self.grad_fn, other_grad_fn),
+                                  result_size = result.shape,
                                   name="+")
             result.requires_grad = True
 
@@ -139,27 +126,18 @@ class Tensor:
         other_data, other_requires_grad, other_grad_fn = (
             (other.data, other.requires_grad, other.grad_fn) if isinstance(other, Tensor)
             else (other, False, None))
-        other_shape = () if isinstance(other, (int, float)) else other.shape
         
         result = Tensor(self.data * other_data, name="*")
 
         if (self.requires_grad or other_requires_grad) and self.grad_enabled:
-            if self.shape == other_shape:
-                # Gradient function for element-wise multiplication of tensors with same shape
-                def grad_fn(grad): return (
-                    other_data * grad if self.requires_grad else None, 
-                    self.data * grad if other_requires_grad else None)
-            else:
-                # Determine the axes along which broadcasting occurs
-                axis_self, axis_other = self.broadcast_axis(self.shape, other_shape)
-
-                # Define the gradient function for element-wise multiplication
-                def grad_fn(grad): return (
-                    np.reshape(np.sum(other_data * grad, axis=axis_self), self.shape) if self.requires_grad else None, 
-                    np.reshape(np.sum(self.data * grad, axis=axis_other), other_shape) if other_requires_grad else None)
+            # Gradient function for element-wise multiplication of tensors with same shape
+            def grad_fn(grad): return (
+                other_data * grad if self.requires_grad else None, 
+                self.data * grad if other_requires_grad else None)
                 
             result.grad_fn = Node(grad_fn=grad_fn,
                                   next_functions=(self.grad_fn, other_grad_fn),
+                                  result_size = result.shape,
                                   name="*")
             result.requires_grad = True
 
@@ -207,21 +185,19 @@ class Tensor:
                 
                 # Determine the axes for broadcasting and reduction
                 result_expand_axis = self_expand_axis + other_expand_axis
-                axis_self, axis_other = self.broadcast_axis(self_expanded_shape[:-2], other_expanded_shape[:-2])
 
                 # Gradient function for matrix multiplication
                 def grad_fn(grad): return (
-                    np.reshape(np.sum(np.squeeze(np.expand_dims(grad, axis=result_expand_axis) @ 
+                    np.squeeze(np.expand_dims(grad, axis=result_expand_axis) @ 
                                                  np.expand_dims(other_data, axis=other_expand_axis).swapaxes(-1, -2),
-                                                 axis=self_expand_axis), 
-                                      axis=axis_self), self.shape) if self.requires_grad else None, 
-                    np.reshape(np.sum(np.squeeze(np.expand_dims(self.data, axis=self_expand_axis).swapaxes(-1, -2) @ 
+                                                 axis=self_expand_axis) if self.requires_grad else None, 
+                    np.squeeze(np.expand_dims(self.data, axis=self_expand_axis).swapaxes(-1, -2) @ 
                                                  np.expand_dims(grad, axis=result_expand_axis),
-                                                 axis=other_expand_axis), 
-                                      axis=axis_other), other.shape) if other_requires_grad else None)
+                                                 axis=other_expand_axis) if other_requires_grad else None)
                     
             result.grad_fn = Node(grad_fn=grad_fn,
                                   next_functions=(self.grad_fn, other_grad_fn),
+                                  result_size = result.shape,
                                   name="@")
             result.requires_grad = True
 
@@ -246,6 +222,7 @@ class Tensor:
             # Define the gradient function for ** operation
             result.grad_fn = Node(grad_fn=lambda grad: (other_data * self.data ** (other_data - 1) * grad, ),
                                   next_functions=(self.grad_fn, ),
+                                  result_size = result.shape,
                                   name="**")
             result.requires_grad = True
 
@@ -268,6 +245,7 @@ class Tensor:
             # Define the gradient function for summation
             result.grad_fn = Node(grad_fn=lambda grad: (np.ones_like(self.data) * np.expand_dims(grad, axis=expand_axis), ),
                                   next_functions=(self.grad_fn, ),
+                                  result_size = result.shape,
                                   name="sum")
             result.requires_grad = True
         
@@ -286,6 +264,7 @@ class Tensor:
             # Define the gradient function for exponent
             result.grad_fn = Node(grad_fn=lambda grad: (result.data * grad, ),
                                   next_functions=(self.grad_fn, ),
+                                  result_size = result.shape,
                                   name="exp")
             result.requires_grad = True
 
@@ -304,6 +283,7 @@ class Tensor:
             # Define the gradient function for logarithm
             result.grad_fn = Node(grad_fn=lambda grad: (grad / self.data, ),
                                   next_functions=(self.grad_fn, ),
+                                  result_size = result.shape,
                                   name="log")
             result.requires_grad = True
 
@@ -322,6 +302,7 @@ class Tensor:
             # Define the gradient function for ReLU
             result.grad_fn = Node(grad_fn=lambda grad: ((self.data > 0) * grad, ),
                                   next_functions=(self.grad_fn, ),
+                                  result_size = result.shape,
                                   name="relu")
             result.requires_grad = True
 
@@ -340,6 +321,7 @@ class Tensor:
             # Define the gradient function for sigmoid
             result.grad_fn = Node(grad_fn=lambda grad: (result.data * (1 - result.data) * grad, ),
                                   next_functions=(self.grad_fn, ),
+                                  result_size = result.shape,
                                   name="sigmoid")
             result.requires_grad = True
 
@@ -358,6 +340,7 @@ class Tensor:
             # Define the gradient function for tanh
             result.grad_fn = Node(grad_fn=lambda grad: ((1 - result.data**2) * grad, ),
                                   next_functions=(self.grad_fn, ),
+                                  result_size = result.shape,
                                   name="tanh")
             result.requires_grad = True
 
@@ -447,7 +430,7 @@ class Tensor:
             if not grad_fn:
                 continue
             next_fns = grad_fn.next_functions
-            res_for_next = grad_fn(grad)
+            res_for_next = grad_fn(grad if grad_fn.result_size == grad.shape else self.sum_to_size(grad, grad_fn.result_size))
             if grad_fn.name != "accum":
                 visited.append(grad_fn)
             if next_fns == ():
@@ -460,7 +443,7 @@ class Tensor:
 
 
 class Node:
-    def __init__(self, grad_fn, next_functions, name=""):
+    def __init__(self, grad_fn, next_functions, result_size, name=""):
         """
         A class representing a gradient function node in the computational graph.
         Gradient function nodes encapsulate the gradient computation and propagation
@@ -469,10 +452,12 @@ class Node:
         Args:
             grad_fn: The gradient function.
             next_functions: A tuple of next gradient function nodes.
+            result_size: The size of the result produced by the operation associated with this node.
             name: The name of the gradient function node (optional).
         """
         self.grad_fn = grad_fn
         self.next_functions = next_functions
+        self.result_size = result_size
         self.name = name
 
     def __call__(self, grad):

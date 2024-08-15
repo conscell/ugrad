@@ -623,3 +623,37 @@ def test_layer_norm():
     assert (np.abs(xut.grad - xpt.grad.numpy()) < tol).all()
     assert (np.abs(wut.grad - wpt.grad.numpy()) < tol).all()
     assert (np.abs(but.grad - bpt.grad.numpy()) < tol).all()
+
+
+def test_sum_to_size():
+    xx = np.arange(2*3*4*5*6).reshape(2, 3, 4, 5, 6)
+    
+    aut = ugrad.Tensor.sum_to_size(xx, (4, 5, 6))
+    but = ugrad.Tensor.sum_to_size(xx, (5, 6))
+    cut = ugrad.Tensor.sum_to_size(xx, (6, ))
+    dut = ugrad.Tensor.sum_to_size(xx, (2, 3, 4, 1, 1))
+    eut = ugrad.Tensor.sum_to_size(xx, (1, 1, 1, 5, 6))
+    fut = ugrad.Tensor.sum_to_size(xx, (1, 1, 1, 1, 1))
+    gut = ugrad.Tensor.sum_to_size(xx, (1, 1, 1))
+    hut = ugrad.Tensor.sum_to_size(xx, (1, ))
+
+    x = torch.Tensor(xx)
+    
+    apt = torch.Tensor.sum_to_size(x, (4, 5, 6))
+    bpt = torch.Tensor.sum_to_size(x, (5, 6))
+    cpt = torch.Tensor.sum_to_size(x, (6, ))
+    dpt = torch.Tensor.sum_to_size(x, (2, 3, 4, 1, 1))
+    ept = torch.Tensor.sum_to_size(x, (1, 1, 1, 5, 6))
+    fpt = torch.Tensor.sum_to_size(x, (1, 1, 1, 1, 1))
+    gpt = torch.Tensor.sum_to_size(x, (1, 1, 1))
+    hpt = torch.Tensor.sum_to_size(x, (1, ))
+
+
+    assert (aut == apt.data.numpy()).all()
+    assert (but == bpt.data.numpy()).all()
+    assert (cut == cpt.data.numpy()).all()
+    assert (dut == dpt.data.numpy()).all()
+    assert (eut == ept.data.numpy()).all()
+    assert (fut == fpt.data.numpy()).all()
+    assert (gut == gpt.data.numpy()).all()
+    assert (hut == hpt.data.numpy()).all()

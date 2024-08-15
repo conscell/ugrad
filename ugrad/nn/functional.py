@@ -55,6 +55,7 @@ def dropout(input, p=0.5, training=True):
         # Define the gradient function for dropout
         result.grad_fn = Node(grad_fn=lambda grad: (drop_mask * grad / (1 - p), ),
                               next_functions=(input.grad_fn, ),
+                              result_size=result.shape,
                               name="dropout")
         result.requires_grad = True
 
