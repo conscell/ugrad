@@ -377,6 +377,28 @@ class Tensor:
         result.name = "softmax"
         return result
     
+    def reshape(self, shape):
+        """
+        Reshape the Tensor to the specified shape.
+
+        Args:
+            shape (tuple or int): The desired shape of the output Tensor.
+
+        Returns:
+            A Tensor object with the specified shape.
+        """
+        result = Tensor(self.data.reshape(shape), name="reshape")
+
+        if self.requires_grad and self.grad_enabled:
+            # Define the gradient function for the reshape operation
+            result.grad_fn = Node(grad_fn=lambda grad: (grad.reshape(self.shape), ),
+                                  next_functions=(self.grad_fn, ),
+                                  result_size = result.shape,
+                                  name="reshape")
+            result.requires_grad = True
+
+        return result
+
     # Other operations
     def __neg__(self):
         return self * (-1)

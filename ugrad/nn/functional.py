@@ -76,3 +76,106 @@ def layer_norm(input, normalized_shape, weight=None, bias=None, eps=1e-05):
     var = (inp_zero_mean ** 2).sum(dim=norm_dim, keepdim=True) / h
     result = inp_zero_mean / (var + eps) ** 0.5 * weight  + bias
     return result
+
+
+def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
+    N = input.shape[0]
+    H_in, W_in = input.shape[-2:]
+    C_in = input.shape[1]
+    C_out = weight.shape[0]
+    kernel_size = weight.shape[-2:]
+    dilation = (dilation, dilation) if isinstance(dilation, int) else dilation
+    dilated_size = (dilation[0] * (kernel_size[0] - 1) + 1, dilation[1] * (kernel_size[1] - 1) + 1)
+    stride = (stride, stride) if isinstance(stride, int) else stride
+    padding = (padding, padding) if isinstance(padding, int) else padding
+    
+    H_out = int((H_in + 2 * padding[0] - dilation[0] * (kernel_size[0] - 1) - 1) / stride[0] + 1)
+    W_out = int((W_in + 2 * padding[1] - dilation[1] * (kernel_size[1] - 1) - 1) / stride[1] + 1)
+
+    result = Tensor(np.zeros((N, C_out, H_out, W_out)), name="conv2d")
+
+    if padding[0] or padding[1]:
+        x = np.zeros((N, C_in, H_in + 2 * padding[0], W_in + 2 * padding[1]))
+        x[...,padding[0] : H_in + padding[0], padding[1] : W_in + padding[1]] = input.data
+    else:
+        x = input.data
+
+    for i in range(H_out):
+        for j in range(W_out):
+            result.data[...,i, j] = np.sum(weight.data * 
+                                           np.expand_dims(x[...,i * stride[0] : i * stride[0] + dilated_size[0] : dilation[0],
+                                                                j * stride[1] : j * stride[1] + dilated_size[1] : dilation[0]], axis=-4),
+                                      axis=(-3, -2, -1))
+    
+    if weight.requires_grad and weight.grad_enabled:
+        def grad_fn(grad): 
+            weight_grad = np.zeros_like(weight.data)
+            for i in range(H_out):
+                for j in range(W_out):
+                    weight_grad += np.sum(np.expand_dims(grad[...,i, j], axis=(-3, -2, -1)) * 
+                                          np.expand_dims(x[...,i * stride[0] : i * stride[0] + dilated_size[0] : dilation[0], 
+                                                               j * stride[1] : j * stride[1] + dilated_size[1] : dilation[1]], axis=-4), 
+                                    axis=0)
+            return (weight_grad, )
+
+        result.grad_fn = Node(grad_fn=grad_fn,
+                                next_functions=(weight.grad_fn, ),
+                                result_size = result.shape,
+                                name="conv2d")
+        result.requires_grad = True
+
+    if bias is None:
+        return result
+
+    return result + bias.reshape((-1, 1, 1))
+
+
+def avg_pool2d(input, kernel_size, stride=None, padding=0):
+    N = input.shape[0]
+    H_in, W_in = input.shape[-2:]
+    C = input.shape[1]
+    kernel_size = (kernel_size, kernel_size) if isinstance(kernel_size, int) else kernel_size
+    if stride is None:
+        stride = kernel_size
+    elif isinstance(stride, int):
+        stride = (stride, stride)
+    padding = (padding, padding) if isinstance(padding, int) else padding
+
+
+    H_out = int((H_in + 2 * padding[0] - kernel_size[0]) / stride[0] + 1)
+    W_out = int((W_in + 2 * padding[1] - kernel_size[1]) / stride[1] + 1)
+
+    result = Tensor(np.zeros((N, C, H_out, W_out)), name="avg_pool2d")
+
+    if padding[0] or padding[1]:
+        x = np.zeros((N, C, H_in + 2 * padding[0], W_in + 2 * padding[1]))
+        x[...,padding[0] : H_in + padding[0], padding[1] : W_in + padding[1]] = input.data
+    else:
+        x = input.data
+
+    for i in range(H_out):
+        for j in range(W_out):
+            result.data[...,i, j] = np.average(x[...,i * stride[0] : i * stride[0] + kernel_size[0],
+                                                     j * stride[1] : j * stride[1] + kernel_size[1]], axis=(-2, -1))
+    
+    if input.requires_grad and input.grad_enabled:
+        def grad_fn(grad):
+            input_grad = np.zeros_like(x)
+            kernel_numel = kernel_size[0] * kernel_size[1]
+            for i in range(H_out):
+                for j in range(W_out):
+                    input_grad[...,i * stride[0] : i * stride[0] + kernel_size[0],
+                                   j * stride[1] : j * stride[1] + kernel_size[1]] += np.expand_dims(grad[...,i, j], 
+                                                                                                     axis=(-2, -1)) / kernel_numel
+            if padding:
+                return (input_grad[...,padding[0] : H_in + padding[0], padding[1] : W_in + padding[1]], )
+            
+            return (input_grad, )
+
+        result.grad_fn = Node(grad_fn=grad_fn,
+                                next_functions=(input.grad_fn, ),
+                                result_size = result.shape,
+                                name="avg_pool2d")
+        result.requires_grad = True
+
+    return result
