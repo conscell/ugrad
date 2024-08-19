@@ -104,7 +104,7 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
         for j in range(W_out):
             result.data[...,i, j] = np.sum(weight.data * 
                                            np.expand_dims(x[...,i * stride[0] : i * stride[0] + dilated_size[0] : dilation[0],
-                                                                j * stride[1] : j * stride[1] + dilated_size[1] : dilation[0]], axis=-4),
+                                                                j * stride[1] : j * stride[1] + dilated_size[1] : dilation[1]], axis=-4),
                                       axis=(-3, -2, -1))
     
     if weight.requires_grad and weight.grad_enabled:
