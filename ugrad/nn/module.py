@@ -1,6 +1,6 @@
 from ..init import *
 from ..tensor import Tensor
-from .functional import layer_norm
+from .functional import layer_norm, conv2d, avg_pool2d
 
 
 class Module:
@@ -181,3 +181,82 @@ class LayerNorm(Module):
             The result of the forward pass.
         """
         return layer_norm(inp, self.normalized_shape, self.weight, self.bias, self.eps)
+
+
+class Conv2d(Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, bias=True, name=""):
+        """
+        Conv2d layer 
+
+        Args:
+
+        """
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = (kernel_size, kernel_size) if isinstance(kernel_size, int) else kernel_size
+        self.stride = (stride, stride) if isinstance(stride, int) else stride
+        self.padding = (padding, padding) if isinstance(padding, int) else padding
+        self.dilation = (dilation, dilation) if isinstance(dilation, int) else dilation
+        self.name = name
+
+        # Initialize weight and bias with random values
+        bound = (self.in_channels * self.kernel_size[0] * self.kernel_size[1]) ** -0.5
+        self.weight = Tensor(np.random.uniform(-bound, bound, 
+                                               (out_channels, 
+                                                in_channels, 
+                                                self.kernel_size[0],
+                                                self.kernel_size[1])), 
+                             requires_grad=True, 
+                             name="w_" + name)
+        if bias:
+            self.bias = Tensor(np.random.uniform(-bound, bound, (out_channels, )), 
+                            requires_grad=True, 
+                            name="b_" + name)
+        else:
+            self.bias = None
+
+    def forward(self, inp):
+        """
+        Perform a forward pass through the Conv2d layer.
+
+        Args:
+            inp: The input tensor.
+
+        Returns:
+            The result of the forward pass.
+        """
+        return conv2d(inp, self.weight, bias=self.bias, 
+                      stride=self.stride, padding=self.padding, dilation=self.dilation)
+
+
+class AvgPool2d(Module):
+    def __init__(self, kernel_size, stride=None, padding=0, name=""):
+        """
+        Conv2d layer 
+
+        Args:
+
+        """
+        super().__init__()
+        self.kernel_size = (kernel_size, kernel_size) if isinstance(kernel_size, int) else kernel_size
+        if stride is None:
+            self.stride = self.kernel_size
+        elif isinstance(stride, int):
+            self.stride = (stride, stride)
+        else:
+            self.stride = stride
+        self.padding = (padding, padding) if isinstance(padding, int) else padding
+        self.name = name
+
+    def forward(self, inp):
+        """
+        Perform a forward pass through the Conv2d layer.
+
+        Args:
+            inp: The input tensor.
+
+        Returns:
+            The result of the forward pass.
+        """
+        return avg_pool2d(inp, self.kernel_size, stride=self.stride, padding=self.padding)

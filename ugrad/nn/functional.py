@@ -92,13 +92,13 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
     H_out = int((H_in + 2 * padding[0] - dilation[0] * (kernel_size[0] - 1) - 1) / stride[0] + 1)
     W_out = int((W_in + 2 * padding[1] - dilation[1] * (kernel_size[1] - 1) - 1) / stride[1] + 1)
 
-    result = Tensor(np.zeros((N, C_out, H_out, W_out)), name="conv2d")
-
     if padding[0] or padding[1]:
         x = np.zeros((N, C_in, H_in + 2 * padding[0], W_in + 2 * padding[1]))
         x[...,padding[0] : H_in + padding[0], padding[1] : W_in + padding[1]] = input.data
     else:
         x = input.data
+
+    result = Tensor(np.zeros((N, C_out, H_out, W_out)), name="conv2d")
 
     for i in range(H_out):
         for j in range(W_out):
@@ -110,6 +110,7 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
     if weight.requires_grad and weight.grad_enabled:
         def grad_fn(grad): 
             weight_grad = np.zeros_like(weight.data)
+            
             for i in range(H_out):
                 for j in range(W_out):
                     weight_grad += np.sum(np.expand_dims(grad[...,i, j], axis=(-3, -2, -1)) * 
@@ -145,13 +146,13 @@ def avg_pool2d(input, kernel_size, stride=None, padding=0):
     H_out = int((H_in + 2 * padding[0] - kernel_size[0]) / stride[0] + 1)
     W_out = int((W_in + 2 * padding[1] - kernel_size[1]) / stride[1] + 1)
 
-    result = Tensor(np.zeros((N, C, H_out, W_out)), name="avg_pool2d")
-
     if padding[0] or padding[1]:
         x = np.zeros((N, C, H_in + 2 * padding[0], W_in + 2 * padding[1]))
         x[...,padding[0] : H_in + padding[0], padding[1] : W_in + padding[1]] = input.data
     else:
         x = input.data
+
+    result = Tensor(np.zeros((N, C, H_out, W_out)), name="avg_pool2d")
 
     for i in range(H_out):
         for j in range(W_out):
@@ -160,8 +161,10 @@ def avg_pool2d(input, kernel_size, stride=None, padding=0):
     
     if input.requires_grad and input.grad_enabled:
         def grad_fn(grad):
-            input_grad = np.zeros_like(x)
             kernel_numel = kernel_size[0] * kernel_size[1]
+            
+            input_grad = np.zeros_like(x)
+            
             for i in range(H_out):
                 for j in range(W_out):
                     input_grad[...,i * stride[0] : i * stride[0] + kernel_size[0],
