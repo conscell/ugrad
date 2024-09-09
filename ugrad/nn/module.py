@@ -186,10 +186,17 @@ class LayerNorm(Module):
 class Conv2d(Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, bias=True, name=""):
         """
-        Conv2d layer 
+        2D Convolutional layer applies a 2D convolution to the input.
 
         Args:
-
+            in_channels: Number of input channels.
+            out_channels: Number of filters (output channels).
+            kernel_size: Size of the convolutional filter.
+            stride: Step size for moving the filter across the input.
+            padding: Number of elements to pad around the input.
+            dilation: Dilation factor for increasing the receptive field of the filter.
+            bias: If True, a bias term is added to the output.
+            name: The name of the Conv2d layer (optional).
         """
         super().__init__()
         self.in_channels = in_channels
@@ -233,10 +240,13 @@ class Conv2d(Module):
 class AvgPool2d(Module):
     def __init__(self, kernel_size, stride=None, padding=0, name=""):
         """
-        Conv2d layer 
+        AvgPool2d layer applies a 2D average pooling to the input.
 
         Args:
-
+            kernel_size: Size of the pooling window.
+            stride: Step size for moving the pooling window across the input. 
+            padding: Number of elements to pad around the input.
+            name: The name of the AvgPool2d layer (optional).
         """
         super().__init__()
         self.kernel_size = (kernel_size, kernel_size) if isinstance(kernel_size, int) else kernel_size
@@ -251,7 +261,7 @@ class AvgPool2d(Module):
 
     def forward(self, inp):
         """
-        Perform a forward pass through the Conv2d layer.
+        Perform a forward pass through the AvgPool2d layer.
 
         Args:
             inp: The input tensor.

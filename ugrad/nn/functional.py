@@ -88,9 +88,6 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
     dilated_size = (dilation[0] * (kernel_size[0] - 1) + 1, dilation[1] * (kernel_size[1] - 1) + 1)
     stride = (stride, stride) if isinstance(stride, int) else stride
     padding = (padding, padding) if isinstance(padding, int) else padding
-    
-    H_out = int((H_in + 2 * padding[0] - dilation[0] * (kernel_size[0] - 1) - 1) / stride[0] + 1)
-    W_out = int((W_in + 2 * padding[1] - dilation[1] * (kernel_size[1] - 1) - 1) / stride[1] + 1)
 
     if padding[0] or padding[1]:
         x = np.zeros((N, C_in, H_in + 2 * padding[0], W_in + 2 * padding[1]))
@@ -99,6 +96,9 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
         x = input.data
 
     # Naïve implementation
+    #
+    # H_out = int((H_in + 2 * padding[0] - dilation[0] * (kernel_size[0] - 1) - 1) / stride[0] + 1)
+    # W_out = int((W_in + 2 * padding[1] - dilation[1] * (kernel_size[1] - 1) - 1) / stride[1] + 1)
     #
     # result = Tensor(np.zeros((N, C_out, H_out, W_out)), name="conv2d")
     #
@@ -158,10 +158,6 @@ def avg_pool2d(input, kernel_size, stride=None, padding=0):
         stride = (stride, stride)
     padding = (padding, padding) if isinstance(padding, int) else padding
 
-
-    H_out = int((H_in + 2 * padding[0] - kernel_size[0]) / stride[0] + 1)
-    W_out = int((W_in + 2 * padding[1] - kernel_size[1]) / stride[1] + 1)
-
     if padding[0] or padding[1]:
         x = np.zeros((N, C, H_in + 2 * padding[0], W_in + 2 * padding[1]))
         x[...,padding[0] : H_in + padding[0], padding[1] : W_in + padding[1]] = input.data
@@ -170,12 +166,15 @@ def avg_pool2d(input, kernel_size, stride=None, padding=0):
 
     # Naïve implementation
     #
+    # H_out = int((H_in + 2 * padding[0] - kernel_size[0]) / stride[0] + 1)
+    # W_out = int((W_in + 2 * padding[1] - kernel_size[1]) / stride[1] + 1)
+    #
     # result = Tensor(np.zeros((N, C, H_out, W_out)), name="avg_pool2d")
-
+    #
     # for i in range(H_out):
     #     for j in range(W_out):
     #         result.data[...,i, j] = np.average(x[...,i * stride[0] : i * stride[0] + kernel_size[0],
-    #                                                 j * stride[1] : j * stride[1] + kernel_size[1]], axis=(-2, -1))
+    #                                                  j * stride[1] : j * stride[1] + kernel_size[1]], axis=(-2, -1))
 
     result = Tensor(np.average(
         np.lib.stride_tricks.sliding_window_view(x, kernel_size, axis=(-2, -1))[..., ::stride[0] ,::stride[1], :, :],

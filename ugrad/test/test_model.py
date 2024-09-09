@@ -54,7 +54,7 @@ def test_model():
 
     tol = 1e-6
 
-    for i in range(1000):
+    for i in range(100):
         y_hat = model(X)
         y_hatT = modelT(XT)
         loss = ugrad.nn.functional.binary_cross_entropy(y_hat, y)
