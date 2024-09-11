@@ -7,7 +7,7 @@ def test_conv2d():
     x = np.arange(2 * 3 * 10 * 20).reshape((2, 3, 10, 20)) * 0.1
     k = np.arange(5 * 3 * 2 * 3).reshape(5, 3, 2, 3) * 0.1
     b = np.arange(5) * 0.1
-    xx = ugrad.Tensor(x)
+    xx = ugrad.Tensor(x, requires_grad=True)
     kk = ugrad.Tensor(k, requires_grad=True)
     bb = ugrad.Tensor(b, requires_grad=True)
 
@@ -16,22 +16,23 @@ def test_conv2d():
     grad_inp = np.arange(f.data.size).reshape(f.data.shape) * 0.1
     
     f.backward(grad_inp)
-    fut, kut, but = f, kk, bb
+    fut, kut, xut, but = f, kk, xx, bb
 
-    xx = torch.tensor(x, dtype=torch.float64)
+    xx = torch.tensor(x, requires_grad=True, dtype=torch.float64)
     kk = torch.tensor(k, requires_grad=True, dtype=torch.float64)
     bb = torch.tensor(b, requires_grad=True, dtype=torch.float64)
 
     f = torch.nn.functional.conv2d(xx, kk, bias=bb, stride=1, padding=0, dilation=1)
     
     f.backward(torch.tensor(grad_inp))
-    fpt, kpt, bpt = f, kk, bb
+    fpt, kpt, xpt, bpt = f, kk, xx, bb
 
     tol = 1e-6
     # forward
     assert (np.abs(fut.data - fpt.data.numpy()) < tol).all()
     # backward
     assert (np.abs(kut.grad - kpt.grad.numpy()) < tol).all()
+    assert (np.abs(xut.grad - xpt.grad.numpy()) < tol).all()
     assert (np.abs(but.grad - bpt.grad.numpy()) < tol).all()
 
 

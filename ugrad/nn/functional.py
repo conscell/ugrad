@@ -95,20 +95,6 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
     else:
         x = input.data
 
-    # Naïve implementation
-    #
-    # H_out = int((H_in + 2 * padding[0] - dilation[0] * (kernel_size[0] - 1) - 1) / stride[0] + 1)
-    # W_out = int((W_in + 2 * padding[1] - dilation[1] * (kernel_size[1] - 1) - 1) / stride[1] + 1)
-    #
-    # result = Tensor(np.zeros((N, C_out, H_out, W_out)), name="conv2d")
-    #
-    # for i in range(H_out):
-    #     for j in range(W_out):
-    #         result.data[...,i, j] = np.sum(weight.data * 
-    #                                        np.expand_dims(x[...,i * stride[0] : i * stride[0] + dilated_size[0] : dilation[0],
-    #                                                             j * stride[1] : j * stride[1] + dilated_size[1] : dilation[1]], axis=-4),
-    #                                 axis=(-3, -2, -1))
-
     x_strided = np.lib.stride_tricks.sliding_window_view(
             x,
             dilated_size,
@@ -117,26 +103,36 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
     
     result = Tensor(np.einsum("oikl, nihwkl -> nohw", weight.data, x_strided), name="conv2d")
     
-    if weight.requires_grad and weight.grad_enabled:
+    if (weight.requires_grad or input.requires_grad) and weight.grad_enabled:
         def grad_fn(grad):
-            
-            # Naïve implementation
-            #
-            # weight_grad = np.zeros_like(weight.data)
-            #
-            # for i in range(H_out):
-            #     for j in range(W_out):
-            #         weight_grad += np.sum(np.expand_dims(grad[...,i, j], axis=(-3, -2, -1)) * 
-            #                               np.expand_dims(x[...,i * stride[0] : i * stride[0] + dilated_size[0] : dilation[0], 
-            #                                                    j * stride[1] : j * stride[1] + dilated_size[1] : dilation[1]], axis=-4), 
-            #                         axis=0)
 
             weight_grad = np.einsum("nohw, nihwkl -> oikl", grad, x_strided) if weight.requires_grad else None
 
-            return (weight_grad, )
+            input_grad = None
+            if input.requires_grad:
+                dilated_weight = np.zeros((weight.data.shape[:2] + dilated_size))
+                dilated_weight[..., ::dilation[0], ::dilation[1]] = weight.data
+                rotated_weight = np.rot90(dilated_weight, 2, axes=(-2, -1))
+                
+                input_grad = np.zeros(grad.shape[:-2] + ((grad.shape[-2] - 1) * stride[0] + 2 * dilated_size[0] - 1, 
+                                                         (grad.shape[-1] - 1) * stride[1] + 2 * dilated_size[1] - 1))
+                
+                input_grad[..., dilated_size[0] - 1 : -dilated_size[0] + 1 : stride[0], 
+                                dilated_size[1] - 1 : -dilated_size[1] + 1 : stride[1]] = grad
+
+                input_grad = np.lib.stride_tricks.sliding_window_view(input_grad, dilated_size, axis=(-2, -1))
+
+                input_grad = np.einsum("nohwkl, oikl -> nihw", input_grad, rotated_weight)
+
+                input_grad = np.pad(input_grad, pad_width=((0, 0), 
+                                                           (0, 0), 
+                                                           (0, max(x.shape[-2] - input_grad.shape[-2], 0)),
+                                                           (0, max(x.shape[-1] - input_grad.shape[-1], 0))))
+
+            return (weight_grad, input_grad)
 
         result.grad_fn = Node(grad_fn=grad_fn,
-                                next_functions=(weight.grad_fn, ),
+                                next_functions=(weight.grad_fn, input.grad_fn),
                                 result_size = result.shape,
                                 name="conv2d")
         result.requires_grad = True
@@ -164,18 +160,6 @@ def avg_pool2d(input, kernel_size, stride=None, padding=0):
     else:
         x = input.data
 
-    # Naïve implementation
-    #
-    # H_out = int((H_in + 2 * padding[0] - kernel_size[0]) / stride[0] + 1)
-    # W_out = int((W_in + 2 * padding[1] - kernel_size[1]) / stride[1] + 1)
-    #
-    # result = Tensor(np.zeros((N, C, H_out, W_out)), name="avg_pool2d")
-    #
-    # for i in range(H_out):
-    #     for j in range(W_out):
-    #         result.data[...,i, j] = np.average(x[...,i * stride[0] : i * stride[0] + kernel_size[0],
-    #                                                  j * stride[1] : j * stride[1] + kernel_size[1]], axis=(-2, -1))
-
     result = Tensor(np.average(
         np.lib.stride_tricks.sliding_window_view(x, kernel_size, axis=(-2, -1))[..., ::stride[0] ,::stride[1], :, :],
         axis=(-2, -1)
@@ -185,16 +169,6 @@ def avg_pool2d(input, kernel_size, stride=None, padding=0):
         def grad_fn(grad):
             kernel_numel = kernel_size[0] * kernel_size[1]
             
-            # Naïve implementation
-            #
-            # input_grad = np.zeros_like(x)
-            #
-            # for i in range(H_out):
-            #     for j in range(W_out):
-            #         input_grad[...,i * stride[0] : i * stride[0] + kernel_size[0],
-            #                        j * stride[1] : j * stride[1] + kernel_size[1]] += np.expand_dims(grad[...,i, j], 
-            #                                                                                          axis=(-2, -1)) / kernel_numel
-
             input_grad = np.zeros(grad.shape[:-2] + ((grad.shape[-2] - 1) * stride[0] + 2 * kernel_size[0] - 1, 
                                                      (grad.shape[-1] - 1) * stride[1] + 2 * kernel_size[1] - 1))
             
