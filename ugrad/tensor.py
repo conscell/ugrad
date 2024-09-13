@@ -71,18 +71,30 @@ class Tensor:
         Returns:
             The transposed Tensor object.
         """
-        result = Tensor(self.data.T, name=".T")
+        return self.transpose()
+
+    def transpose(self, dims=None):
+        """
+        Return the transpose of the Tensor.
+
+        Args:
+            dims: If specified, return the Tensor with its axes permuted.
+
+        Returns:
+            The transposed Tensor object.
+        """
+        result = Tensor(np.transpose(self.data, axes=dims), name="transpose")
 
         if self.requires_grad and self.grad_enabled:
             # Define the gradient function for the transpose operation
-            result.grad_fn = Node(grad_fn=lambda grad: (grad.T, ),
+            result.grad_fn = Node(grad_fn=lambda grad: (np.transpose(grad, axes=None if dims is None else np.argsort(np.array(dims)).tolist()), ),
                                   next_functions=(self.grad_fn, ),
                                   result_size = result.shape,
-                                  name=".T")
+                                  name="transpose")
             result.requires_grad = True
         
         return result
-
+    
     def __add__(self, other):
         """
         Add two Tensor objects element-wise.
