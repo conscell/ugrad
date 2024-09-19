@@ -71,30 +71,52 @@ class Tensor:
         Returns:
             The transposed Tensor object.
         """
-        return self.transpose()
+        return self.permute()
 
-    def transpose(self, dims=None):
+    def permute(self, dims=None):
         """
-        Return the transpose of the Tensor.
+        Permute the dimensions of the Tensor or return its transpose.
 
         Args:
-            dims: If specified, return the Tensor with its axes permuted.
+            dims: The desired order of axes. If None, the Tensor is simply transposed (reverses all axes).
 
         Returns:
-            The transposed Tensor object.
+            A Tensor object with permuted dimensions based on the specified axes, or the transposed Tensor if no axes provided.
         """
-        result = Tensor(np.transpose(self.data, axes=dims), name="transpose")
+        result = Tensor(np.transpose(self.data, axes=dims), name="T")
 
         if self.requires_grad and self.grad_enabled:
             # Define the gradient function for the transpose operation
-            result.grad_fn = Node(grad_fn=lambda grad: (np.transpose(grad, axes=None if dims is None else np.argsort(np.array(dims)).tolist()), ),
+            result.grad_fn = Node(grad_fn=lambda grad: (np.transpose(grad, axes=None if dims is None else sorted(range(len(dims)), key=dims.__getitem__)), ),
                                   next_functions=(self.grad_fn, ),
                                   result_size = result.shape,
-                                  name="transpose")
+                                  name="T")
             result.requires_grad = True
         
         return result
-    
+
+    def reshape(self, shape):
+        """
+        Reshape the Tensor to the specified shape.
+
+        Args:
+            shape (tuple or int): The desired shape of the output Tensor.
+
+        Returns:
+            A Tensor object with the specified shape.
+        """
+        result = Tensor(self.data.reshape(shape), name="reshape")
+
+        if self.requires_grad and self.grad_enabled:
+            # Define the gradient function for the reshape operation
+            result.grad_fn = Node(grad_fn=lambda grad: (grad.reshape(self.shape), ),
+                                  next_functions=(self.grad_fn, ),
+                                  result_size = result.shape,
+                                  name="reshape")
+            result.requires_grad = True
+
+        return result
+
     def __add__(self, other):
         """
         Add two Tensor objects element-wise.
@@ -178,22 +200,11 @@ class Tensor:
                     grad @ other_data.T if self.requires_grad else None, 
                     self.data.T @ grad if other_requires_grad else None)
             else:
-                # Other cases
-                if self.data.ndim == 1:
-                    # Handling broadcasting for self when it is 1D
-                    self_expand_axis = (0, )
-                    self_expanded_shape = (1, ) + self.shape 
-                else:
-                    self_expand_axis = ()
-                    self_expanded_shape = self.shape
+                # Handling broadcasting for self when it is 1D
+                self_expand_axis = (0, ) if self.data.ndim == 1 else ()
                 
-                if other_data.ndim == 1:
-                    # Handling broadcasting for other when it is 1D
-                    other_expand_axis = (-1, )
-                    other_expanded_shape = other.shape + (1, )
-                else:
-                    other_expand_axis = ()
-                    other_expanded_shape = other.shape
+                # Handling broadcasting for other when it is 1D
+                other_expand_axis = (-1, ) if other_data.ndim == 1 else ()
                 
                 # Determine the axes for broadcasting and reduction
                 result_expand_axis = self_expand_axis + other_expand_axis
@@ -387,28 +398,6 @@ class Tensor:
         logits_off_exp = logits_off.exp()
         result = logits_off_exp / logits_off_exp.sum(dim=dim, keepdim=True)
         result.name = "softmax"
-        return result
-    
-    def reshape(self, shape):
-        """
-        Reshape the Tensor to the specified shape.
-
-        Args:
-            shape (tuple or int): The desired shape of the output Tensor.
-
-        Returns:
-            A Tensor object with the specified shape.
-        """
-        result = Tensor(self.data.reshape(shape), name="reshape")
-
-        if self.requires_grad and self.grad_enabled:
-            # Define the gradient function for the reshape operation
-            result.grad_fn = Node(grad_fn=lambda grad: (grad.reshape(self.shape), ),
-                                  next_functions=(self.grad_fn, ),
-                                  result_size = result.shape,
-                                  name="reshape")
-            result.requires_grad = True
-
         return result
 
     # Other operations
