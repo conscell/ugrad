@@ -79,10 +79,7 @@ def layer_norm(input, normalized_shape, weight=None, bias=None, eps=1e-05):
 
 
 def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
-    N = input.shape[0]
-    H_in, W_in = input.shape[-2:]
-    C_in = input.shape[1]
-    C_out = weight.shape[0]
+    N, C_in, H_in, W_in = input.shape
     kernel_size = weight.shape[-2:]
     dilation = (dilation, dilation) if isinstance(dilation, int) else dilation
     dilated_size = (dilation[0] * (kernel_size[0] - 1) + 1, dilation[1] * (kernel_size[1] - 1) + 1)
@@ -101,18 +98,15 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
             axis=(-2, -1)
         )[..., ::stride[0] ,::stride[1], ::dilation[0], ::dilation[1]]
     
-    result = Tensor(np.einsum("oikl, nihwkl -> nohw", weight.data, x_strided), name="conv2d")
+    result = Tensor(np.einsum("nihwkl, oikl -> nohw", x_strided, weight.data), name="conv2d")
     
     if (weight.requires_grad or input.requires_grad) and weight.grad_enabled:
         def grad_fn(grad):
-
-            weight_grad = np.einsum("nohw, nihwkl -> oikl", grad, x_strided) if weight.requires_grad else None
+            weight_grad = np.einsum("nihwkl, nohw -> oikl", x_strided, grad) if weight.requires_grad else None
 
             input_grad = None
             if input.requires_grad:
-                dilated_weight = np.zeros((weight.data.shape[:2] + dilated_size))
-                dilated_weight[..., ::dilation[0], ::dilation[1]] = weight.data
-                rotated_weight = np.rot90(dilated_weight, 2, axes=(-2, -1))
+                rotated_weight = np.rot90(weight.data, 2, axes=(-2, -1))
                 
                 input_grad = np.zeros(grad.shape[:-2] + ((grad.shape[-2] - 1) * stride[0] + 2 * dilated_size[0] - 1, 
                                                          (grad.shape[-1] - 1) * stride[1] + 2 * dilated_size[1] - 1))
@@ -120,7 +114,7 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
                 input_grad[..., dilated_size[0] - 1 : -dilated_size[0] + 1 : stride[0], 
                                 dilated_size[1] - 1 : -dilated_size[1] + 1 : stride[1]] = grad
 
-                input_grad = np.lib.stride_tricks.sliding_window_view(input_grad, dilated_size, axis=(-2, -1))
+                input_grad = np.lib.stride_tricks.sliding_window_view(input_grad, dilated_size, axis=(-2, -1))[..., ::dilation[0], ::dilation[1]]
 
                 input_grad = np.einsum("nohwkl, oikl -> nihw", input_grad, rotated_weight)
 
@@ -128,6 +122,8 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
                                                            (0, 0), 
                                                            (0, max(x.shape[-2] - input_grad.shape[-2], 0)),
                                                            (0, max(x.shape[-1] - input_grad.shape[-1], 0))))
+                if padding[0] or padding[1]:
+                    input_grad = input_grad[..., padding[0] : H_in + padding[0], padding[1] : W_in + padding[1]]
 
             return (weight_grad, input_grad)
 
@@ -144,9 +140,7 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
 
 
 def avg_pool2d(input, kernel_size, stride=None, padding=0):
-    N = input.shape[0]
-    H_in, W_in = input.shape[-2:]
-    C = input.shape[1]
+    N, C, H_in, W_in = input.shape
     kernel_size = (kernel_size, kernel_size) if isinstance(kernel_size, int) else kernel_size
     if stride is None:
         stride = kernel_size
@@ -167,22 +161,20 @@ def avg_pool2d(input, kernel_size, stride=None, padding=0):
     
     if input.requires_grad and input.grad_enabled:
         def grad_fn(grad):
-            kernel_numel = kernel_size[0] * kernel_size[1]
-            
             input_grad = np.zeros(grad.shape[:-2] + ((grad.shape[-2] - 1) * stride[0] + 2 * kernel_size[0] - 1, 
                                                      (grad.shape[-1] - 1) * stride[1] + 2 * kernel_size[1] - 1))
             
             input_grad[..., kernel_size[0] - 1 : -kernel_size[0] + 1 : stride[0], 
                             kernel_size[1] - 1 : -kernel_size[1] + 1 : stride[1]] = grad
             
-            input_grad = np.sum(np.lib.stride_tricks.sliding_window_view(input_grad, kernel_size, axis=(-2, -1)), axis=(-2, -1)) / kernel_numel
+            input_grad = np.average(np.lib.stride_tricks.sliding_window_view(input_grad, kernel_size, axis=(-2, -1)), axis=(-2, -1))
             
             input_grad = np.pad(input_grad, pad_width=((0, 0), 
                                                        (0, 0), 
                                                        (0, max(x.shape[-2] - input_grad.shape[-2], 0)),
                                                        (0, max(x.shape[-1] - input_grad.shape[-1], 0))))
-            if padding:
-                return (input_grad[...,padding[0] : H_in + padding[0], padding[1] : W_in + padding[1]], )
+            if padding[0] or padding[1]:
+                return (input_grad[..., padding[0] : H_in + padding[0], padding[1] : W_in + padding[1]], )
             
             return (input_grad, )
 
