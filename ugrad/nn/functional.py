@@ -55,7 +55,7 @@ def dropout(input, p=0.5, training=True):
         # Define the gradient function for dropout
         result.grad_fn = Node(grad_fn=lambda grad: (drop_mask * grad / (1 - p), ),
                               next_functions=(input.grad_fn, ),
-                              result_size=result.shape,
+                              variable=result,
                               name="dropout")
         result.requires_grad = True
 
@@ -129,7 +129,7 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1):
 
         result.grad_fn = Node(grad_fn=grad_fn,
                                 next_functions=(weight.grad_fn, input.grad_fn),
-                                result_size = result.shape,
+                                variable=result,
                                 name="conv2d")
         result.requires_grad = True
 
@@ -180,7 +180,7 @@ def avg_pool2d(input, kernel_size, stride=None, padding=0):
 
         result.grad_fn = Node(grad_fn=grad_fn,
                                 next_functions=(input.grad_fn, ),
-                                result_size = result.shape,
+                                variable=result,
                                 name="avg_pool2d")
         result.requires_grad = True
 

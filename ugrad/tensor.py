@@ -18,10 +18,11 @@ class Tensor:
         self.shape = self.data.shape
         self.name = name
         self.requires_grad = requires_grad
+        self.retains_grad = False
         self.grad, self.grad_fn = (
             (np.zeros_like(self.data), Node(grad_fn=self.accum_grad, 
                                             next_functions=(),
-                                            result_size = self.shape,
+                                            variable = self,
                                             name="accum")) if requires_grad and self.grad_enabled 
             else (None, None))
     
@@ -89,7 +90,7 @@ class Tensor:
             # Define the gradient function for the transpose operation
             result.grad_fn = Node(grad_fn=lambda grad: (np.transpose(grad, axes=None if dims is None else sorted(range(len(dims)), key=dims.__getitem__)), ),
                                   next_functions=(self.grad_fn, ),
-                                  result_size = result.shape,
+                                  variable=result,
                                   name="T")
             result.requires_grad = True
         
@@ -111,7 +112,7 @@ class Tensor:
             # Define the gradient function for the reshape operation
             result.grad_fn = Node(grad_fn=lambda grad: (grad.reshape(self.shape), ),
                                   next_functions=(self.grad_fn, ),
-                                  result_size = result.shape,
+                                  variable=result,
                                   name="reshape")
             result.requires_grad = True
 
@@ -141,7 +142,7 @@ class Tensor:
 
             result.grad_fn = Node(grad_fn=grad_fn,
                                   next_functions=(self.grad_fn, other_grad_fn),
-                                  result_size = result.shape,
+                                  variable=result,
                                   name="+")
             result.requires_grad = True
 
@@ -171,7 +172,7 @@ class Tensor:
                 
             result.grad_fn = Node(grad_fn=grad_fn,
                                   next_functions=(self.grad_fn, other_grad_fn),
-                                  result_size = result.shape,
+                                  variable=result,
                                   name="*")
             result.requires_grad = True
 
@@ -220,7 +221,7 @@ class Tensor:
                     
             result.grad_fn = Node(grad_fn=grad_fn,
                                   next_functions=(self.grad_fn, other_grad_fn),
-                                  result_size = result.shape,
+                                  variable=result,
                                   name="@")
             result.requires_grad = True
 
@@ -245,7 +246,7 @@ class Tensor:
             # Define the gradient function for ** operation
             result.grad_fn = Node(grad_fn=lambda grad: (other_data * self.data ** (other_data - 1) * grad, ),
                                   next_functions=(self.grad_fn, ),
-                                  result_size = result.shape,
+                                  variable=result,
                                   name="**")
             result.requires_grad = True
 
@@ -268,7 +269,7 @@ class Tensor:
             # Define the gradient function for summation
             result.grad_fn = Node(grad_fn=lambda grad: (np.ones_like(self.data) * np.expand_dims(grad, axis=expand_axis), ),
                                   next_functions=(self.grad_fn, ),
-                                  result_size = result.shape,
+                                  variable=result,
                                   name="sum")
             result.requires_grad = True
         
@@ -287,7 +288,7 @@ class Tensor:
             # Define the gradient function for exponent
             result.grad_fn = Node(grad_fn=lambda grad: (result.data * grad, ),
                                   next_functions=(self.grad_fn, ),
-                                  result_size = result.shape,
+                                  variable=result,
                                   name="exp")
             result.requires_grad = True
 
@@ -306,7 +307,7 @@ class Tensor:
             # Define the gradient function for logarithm
             result.grad_fn = Node(grad_fn=lambda grad: (grad / self.data, ),
                                   next_functions=(self.grad_fn, ),
-                                  result_size = result.shape,
+                                  variable=result,
                                   name="log")
             result.requires_grad = True
 
@@ -325,7 +326,7 @@ class Tensor:
             # Define the gradient function for ReLU
             result.grad_fn = Node(grad_fn=lambda grad: ((self.data > 0) * grad, ),
                                   next_functions=(self.grad_fn, ),
-                                  result_size = result.shape,
+                                  variable=result,
                                   name="relu")
             result.requires_grad = True
 
@@ -344,7 +345,7 @@ class Tensor:
             # Define the gradient function for sigmoid
             result.grad_fn = Node(grad_fn=lambda grad: (result.data * (1 - result.data) * grad, ),
                                   next_functions=(self.grad_fn, ),
-                                  result_size = result.shape,
+                                  variable=result,
                                   name="sigmoid")
             result.requires_grad = True
 
@@ -363,7 +364,7 @@ class Tensor:
             # Define the gradient function for tanh
             result.grad_fn = Node(grad_fn=lambda grad: ((1 - result.data**2) * grad, ),
                                   next_functions=(self.grad_fn, ),
-                                  result_size = result.shape,
+                                  variable=result,
                                   name="tanh")
             result.requires_grad = True
 
@@ -441,32 +442,45 @@ class Tensor:
 
         Args:
             gradient: Gradient w.r.t. the tensor. 
-            retain: If True, the graph used to compute the grads will be retained, otherwise it will be freed (default: False).
+            retain_graph: If True, the graph used to compute the grads will be retained, otherwise it will be freed (default: False).
 
         Returns:
             None
         """
-        stack = [(self.grad_fn, gradient if gradient is not None else np.ones_like(self.data))]
-        visited = []
+        topo = set()
+        stack = [self.grad_fn]
         while stack:
-            grad_fn, grad = stack.pop()
-            if not grad_fn:
-                continue
-            next_fns = grad_fn.next_functions
-            res_for_next = grad_fn(grad if grad_fn.result_size == grad.shape else self.sum_to_size(grad, grad_fn.result_size))
-            if grad_fn.name != "accum":
-                visited.append(grad_fn)
-            if next_fns == ():
-                continue
-            for n, r in zip(next_fns, res_for_next):
-                stack.append((n, r))
-        if not retain_graph:
-            for grad_fn in visited:
+            grad_fn = stack.pop()
+            if grad_fn not in topo:
+                for fn in grad_fn.next_functions:
+                    if fn:
+                        stack.append(fn)
+                grad_fn.grad = np.zeros_like(grad_fn.variable.data)
+                topo.add(grad_fn)
+
+        topo = sorted(topo, key=lambda n: n.topological_nr, reverse=True)
+
+        self.grad_fn.grad = gradient if gradient is not None else np.ones_like(self.data)        
+        for grad_fn in topo:
+            for fn, gr in zip(grad_fn.next_functions, grad_fn(grad_fn.grad)):
+                if fn:
+                    fn.grad += gr if gr.shape == fn.variable.shape else self.sum_to_size(gr, fn.variable.shape)
+
+            if grad_fn.variable.retains_grad:
+                if grad_fn.variable.grad is not None:
+                    grad_fn.variable.grad += grad_fn.grad
+                else:
+                    grad_fn.variable.grad = grad_fn.grad
+
+            if grad_fn.name != "accum" and not retain_graph:
                 grad_fn.grad_fn = None
+                grad_fn.variable = None
+
+            grad_fn.grad = None
 
 
 class Node:
-    def __init__(self, grad_fn, next_functions, result_size, name=""):
+    def __init__(self, grad_fn, next_functions, variable, name=""):
         """
         A class representing a gradient function node in the computational graph.
         Gradient function nodes encapsulate the gradient computation and propagation
@@ -475,13 +489,17 @@ class Node:
         Args:
             grad_fn: The gradient function.
             next_functions: A tuple of next gradient function nodes.
-            result_size: The size of the result produced by the operation associated with this node.
+            variable: The variable associated with this node in the computation.
             name: The name of the gradient function node (optional).
         """
         self.grad_fn = grad_fn
         self.next_functions = next_functions
-        self.result_size = result_size
+        self.variable = variable
         self.name = name
+        self.topological_nr = 0
+        for fn in next_functions:
+            if fn and self.topological_nr <= fn.topological_nr:
+                self.topological_nr = fn.topological_nr + 1
 
     def __call__(self, grad):
         """
