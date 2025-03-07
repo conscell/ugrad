@@ -1,5 +1,6 @@
-from ..init import *
+import numpy as np
 from ..tensor import Tensor
+from ..tensorbase import TensorBase
 
 
 class Module:
@@ -103,10 +104,10 @@ class Linear(Module):
 
         # Initialize weight and bias with random values
         bound = self.in_features ** -0.5
-        self.weight = Tensor(np.random.uniform(-bound, bound, (out_features, in_features)), 
+        self.weight = Tensor(TensorBase(np.random.uniform(-bound, bound, (out_features, in_features)), dtype="double"), 
                              requires_grad=True, 
                              name="w_" + name)
-        self.bias = Tensor(np.random.uniform(-bound, bound, (out_features, )), 
+        self.bias = Tensor(TensorBase(np.random.uniform(-bound, bound, (out_features, )), dtype="double"), 
                            requires_grad=True, 
                            name="b_" + name)
 

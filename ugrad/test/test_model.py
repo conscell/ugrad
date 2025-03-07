@@ -36,11 +36,11 @@ def test_model():
     yT = torch.tensor([[1.], [0.]]).double()
 
     with torch.no_grad():
-        modelT.l1.weight = torch.nn.Parameter(torch.tensor(model.l1.weight.data, dtype=torch.float64))
-        modelT.l1.bias = torch.nn.Parameter(torch.tensor(model.l1.bias.data, dtype=torch.float64))
+        modelT.l1.weight = torch.nn.Parameter(torch.tensor(model.l1.weight.data.numpy(), dtype=torch.float64))
+        modelT.l1.bias = torch.nn.Parameter(torch.tensor(model.l1.bias.data.numpy(), dtype=torch.float64))
 
-        modelT.l2.weight = torch.nn.Parameter(torch.tensor(model.l2.weight.data, dtype=torch.float64))
-        modelT.l2.bias = torch.nn.Parameter(torch.tensor(model.l2.bias.data, dtype=torch.float64))
+        modelT.l2.weight = torch.nn.Parameter(torch.tensor(model.l2.weight.data.numpy(), dtype=torch.float64))
+        modelT.l2.bias = torch.nn.Parameter(torch.tensor(model.l2.bias.data.numpy(), dtype=torch.float64))
 
     optimizer = ugrad.optim.SGD(model.parameters(), lr=1e-2, weight_decay=1e-3)
     scheduler = ugrad.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.5, total_iters=100)
@@ -57,7 +57,7 @@ def test_model():
         y_hatT = modelT(XT)
         loss = ugrad.nn.functional.binary_cross_entropy(y_hat, y)
         lossT = torch.nn.functional.binary_cross_entropy(y_hatT, yT)
-        assert abs(loss.data - lossT.data.item()) < tol
+        assert abs(loss.data.numpy() - lossT.data.numpy()) < tol
         loss.backward()
         lossT.backward()
         optimizer.step()

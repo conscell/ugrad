@@ -9,7 +9,7 @@ import ugrad.nn.functional as F
 def main():
     seed = 1717
     np.random.seed(seed)
-    num_epochs = 3
+    num_epochs = 10
     batch_size = 200
 
     from sklearn.datasets import fetch_openml
@@ -18,8 +18,8 @@ def main():
     
     X, y = fetch_openml("mnist_784", version=1, return_X_y=True, as_frame=False, parser='liac-arff')
     X, y = shuffle(X, y, random_state=42)
-    X = X[:1200]
-    y = y[:1200]
+    X = X[:12000]
+    y = y[:12000]
     y = y.astype(np.int64)
     # Scale images to the [0, 1] range
     X /= 255.
@@ -30,6 +30,8 @@ def main():
     inputs_t = ugrad.Tensor(X_test)
     labels_t = ugrad.Tensor(np.eye(10)[y_test])
     print(f"{labels_t.data[0]=}")
+    inputs_t.data = inputs_t.data.to("cuda")
+    labels_t.data = labels_t.data.to("cuda")
 
     class Model(nn.Module):
         def __init__(self):
@@ -45,6 +47,11 @@ def main():
             return out
 
     model = Model()
+    for p in model.parameters():
+        p.data = p.data.to("cuda")
+        p.grad = p.grad.to("cuda")
+
+    
     optimizer = ugrad.optim.SGD(model.parameters(), lr=5e-2, weight_decay=1e-4)
     scheduler = ugrad.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.75, total_iters=num_epochs)
 
@@ -57,6 +64,8 @@ def main():
         for batch in range(num_batches):
             inputs = ugrad.Tensor(X_train[batch * batch_size:(batch + 1) * batch_size])
             labels = ugrad.Tensor(np.eye(10)[y_train[batch * batch_size:(batch + 1) * batch_size]])
+            inputs.data = inputs.data.to("cuda")
+            labels.data = labels.data.to("cuda")
 
             # Forward
             preds = model(inputs)
@@ -69,18 +78,19 @@ def main():
             # Update (SGD)
             optimizer.step()
 
-            accuracy += int((preds.data.argmax(-1) == labels.data.argmax(-1)).sum().item())
-            train_loss += loss.data.item()
+            accuracy += int((preds.data.argmax(-1) == labels.data.argmax(-1)).sum().to("cpu").item())
+            train_loss += loss.data.to("cpu").item()
 
         scheduler.step()
         accuracy /= X_train.shape[0]
         train_loss /= X_train.shape[0]
-        
+      
         with ugrad.no_grad():
             preds_t = model(inputs_t)
-            loss_t = F.nll_loss(preds_t, labels_t).data.item()
+            loss_t = F.nll_loss(preds_t, labels_t)
 
-        accuracy_t = int((preds_t.data.argmax(-1) == labels_t.data.argmax(-1)).sum().item()) / X_test.shape[0]
+        loss_t = loss_t.data.to("cpu").item()
+        accuracy_t = int((preds_t.data.argmax(-1) == labels_t.data.argmax(-1)).sum().to("cpu").item()) / X_test.shape[0]
 
         print(f"Epoch {k+1} loss {train_loss:.6f}, accuracy {accuracy * 100:.6f}%  test loss {loss_t:.6f}, test accuracy {accuracy_t * 100:.6f}% lr {optimizer.lr:.6f}")
 

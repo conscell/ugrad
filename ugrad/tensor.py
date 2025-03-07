@@ -1,4 +1,4 @@
-from .init import *
+from .tensorbase import TensorBase
 
 
 class Tensor:
@@ -14,12 +14,12 @@ class Tensor:
             name: The name of the tensor (optional).
             requires_grad: Whether to compute gradients for this tensor (default: False).
         """
-        self.data = data if isinstance(data, np.ndarray) else np.array(data)
+        self.data = data if isinstance(data, TensorBase) else TensorBase(data)
         self.shape = self.data.shape
         self.name = name
         self.requires_grad = requires_grad
         self.grad, self.grad_fn = (
-            (np.zeros_like(self.data), Node(grad_fn=self.accum_grad, 
+            (TensorBase.zeros_like(self.data), Node(grad_fn=self.accum_grad, 
                                             next_functions=(), 
                                             name="accum")) if requires_grad and self.grad_enabled 
             else (None, None))
@@ -116,8 +116,8 @@ class Tensor:
                 
                 # Define the gradient function for element-wise addition
                 def grad_fn(grad): return (
-                    np.reshape(np.sum(grad, axis=axis_self), self.shape) if self.requires_grad else None,
-                    np.reshape(np.sum(grad, axis=axis_other), other_shape) if other_requires_grad else None)
+                    grad.sum(axis=axis_self).reshape(self.shape) if self.requires_grad else None,
+                    grad.sum(axis=axis_other).reshape(other_shape) if other_requires_grad else None)
                 
             result.grad_fn = Node(grad_fn=grad_fn,
                                   next_functions=(self.grad_fn, other_grad_fn),
@@ -155,8 +155,8 @@ class Tensor:
 
                 # Define the gradient function for element-wise multiplication
                 def grad_fn(grad): return (
-                    np.reshape(np.sum(other_data * grad, axis=axis_self), self.shape) if self.requires_grad else None, 
-                    np.reshape(np.sum(self.data * grad, axis=axis_other), other_shape) if other_requires_grad else None)
+                    (other_data * grad).sum(axis=axis_self).reshape(self.shape) if self.requires_grad else None, 
+                    (self.data * grad).sum(axis=axis_other).reshape(other_shape) if other_requires_grad else None)
                 
             result.grad_fn = Node(grad_fn=grad_fn,
                                   next_functions=(self.grad_fn, other_grad_fn),
@@ -211,15 +211,15 @@ class Tensor:
 
                 # Gradient function for matrix multiplication
                 def grad_fn(grad): return (
-                    np.reshape(np.sum(np.squeeze(np.expand_dims(grad, axis=result_expand_axis) @ 
-                                                 np.expand_dims(other_data, axis=other_expand_axis).swapaxes(-1, -2),
-                                                 axis=self_expand_axis), 
-                                      axis=axis_self), self.shape) if self.requires_grad else None, 
-                    np.reshape(np.sum(np.squeeze(np.expand_dims(self.data, axis=self_expand_axis).swapaxes(-1, -2) @ 
-                                                 np.expand_dims(grad, axis=result_expand_axis),
-                                                 axis=other_expand_axis), 
-                                      axis=axis_other), other.shape) if other_requires_grad else None)
-                    
+                    (grad.expand_dims(axis=result_expand_axis) @ other_data.expand_dims(axis=other_expand_axis).T)
+                    .squeeze(axis=self_expand_axis)
+                    .sum(axis=axis_self)
+                    .reshape(self.shape) if self.requires_grad else None, 
+                    (self.data.expand_dims(axis=self_expand_axis).T @ grad.expand_dims(axis=result_expand_axis))
+                    .squeeze(axis=other_expand_axis)
+                    .sum(axis=axis_other)
+                    .reshape(other.shape) if other_requires_grad else None)
+
             result.grad_fn = Node(grad_fn=grad_fn,
                                   next_functions=(self.grad_fn, other_grad_fn),
                                   name="@")
@@ -261,12 +261,12 @@ class Tensor:
         Returns:
             The resulting Tensor object representing the sum.
         """
-        result = Tensor(np.sum(self.data, axis=dim, keepdims=keepdim), name="sum")
+        result = Tensor(self.data.sum(axis=dim, keepdims=keepdim), name="sum")
 
         if self.requires_grad and self.grad_enabled:
             expand_axis = dim if dim and not keepdim else ()
             # Define the gradient function for summation
-            result.grad_fn = Node(grad_fn=lambda grad: (np.ones_like(self.data) * np.expand_dims(grad, axis=expand_axis), ),
+            result.grad_fn = Node(grad_fn=lambda grad: (TensorBase.ones_like(self.data) * grad.expand_dims(axis=expand_axis), ),
                                   next_functions=(self.grad_fn, ),
                                   name="sum")
             result.requires_grad = True
@@ -280,7 +280,7 @@ class Tensor:
         Returns:
             The resulting Tensor object representing the exponential.
         """
-        result = Tensor(np.exp(self.data), name="exp")
+        result = Tensor(self.data.exp(), name="exp")
 
         if self.requires_grad and self.grad_enabled:
             # Define the gradient function for exponent
@@ -298,7 +298,7 @@ class Tensor:
         Returns:
             The resulting Tensor object representing the logarithm.
         """
-        result = Tensor(np.log(self.data), name="log")
+        result = Tensor(self.data.log(), name="log")
 
         if self.requires_grad and self.grad_enabled:
             # Define the gradient function for logarithm
@@ -316,7 +316,7 @@ class Tensor:
         Returns:
             The resulting Tensor object after applying ReLU.
         """
-        result = Tensor(np.maximum(0, self.data), name="relu")
+        result = Tensor(self.data.maximum(0), name="relu")
         
         if self.requires_grad and self.grad_enabled:
             # Define the gradient function for ReLU
@@ -334,7 +334,7 @@ class Tensor:
         Returns:
             The resulting Tensor object after applying the sigmoid function.
         """
-        result = Tensor(np.tanh(self.data * 0.5) * 0.5 + 0.5, name="sigmoid")
+        result = Tensor((self.data * 0.5).tanh() * 0.5 + 0.5, name="sigmoid")
         
         if self.requires_grad and self.grad_enabled:
             # Define the gradient function for sigmoid
@@ -352,7 +352,7 @@ class Tensor:
         Returns:
             The resulting Tensor object after applying the tanh function.
         """
-        result = Tensor(np.tanh(self.data), name="tanh")
+        result = Tensor(self.data.tanh(), name="tanh")
         
         if self.requires_grad and self.grad_enabled:
             # Define the gradient function for tanh
@@ -373,7 +373,7 @@ class Tensor:
         Returns:
             The resulting Tensor object after applying the log-softmax function.
         """
-        logits_off = self - np.max(self.data, axis=dim, keepdims=True)
+        logits_off = self - self.data.max(axis=dim, keepdims=True)
         result = logits_off - logits_off.exp().sum(dim=dim, keepdim=True).log()
         result.name = "log_softmax"
         return result
@@ -424,7 +424,7 @@ class Tensor:
         Returns:
             None
         """
-        stack = [(self.grad_fn, gradient if gradient is not None else np.ones_like(self.data))]
+        stack = [(self.grad_fn, gradient if gradient is not None else TensorBase.ones_like(self.data))]
         visited = []
         while stack:
             grad_fn, grad = stack.pop()

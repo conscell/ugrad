@@ -18,9 +18,9 @@ def test_sum1D():
     xpt, ypt = x, y
 
     # forward
-    assert (yut.data == ypt.data.numpy()).all()
+    assert (yut.data.numpy() == ypt.data.numpy()).all()
     # backward
-    assert (xut.grad == xpt.grad.numpy()).all()
+    assert (xut.grad.numpy() == xpt.grad.numpy()).all()
 
 
 def test_sum2D_row():
@@ -38,9 +38,9 @@ def test_sum2D_row():
     xpt, ypt = x, y
 
     # forward
-    assert (yut.data == ypt.data.numpy()).all()
+    assert (yut.data.numpy() == ypt.data.numpy()).all()
     # backward
-    assert (xut.grad == xpt.grad.numpy()).all()
+    assert (xut.grad.numpy() == xpt.grad.numpy()).all()
 
 
 def test_sum2D_col():
@@ -58,15 +58,15 @@ def test_sum2D_col():
     xpt, ypt = x, y
 
     # forward
-    assert (yut.data == ypt.data.numpy()).all()
+    assert (yut.data.numpy() == ypt.data.numpy()).all()
     # backward
-    assert (xut.grad == xpt.grad.numpy()).all()
+    assert (xut.grad.numpy() == xpt.grad.numpy()).all()
 
 
 def test_sum2D_axis0():
 
-    xx = np.arange(2*3).reshape(2, 3)
-    yy = np.arange(3)
+    xx = np.arange(2*3).reshape(2, 3) * 1.
+    yy = np.arange(3) * 1.
 
     x = ugrad.Tensor(xx, requires_grad=True)
     y = ugrad.Tensor(yy, requires_grad=True)
@@ -83,16 +83,16 @@ def test_sum2D_axis0():
     xpt, ypt, zpt = x, y, z
 
     # forward
-    assert (zut.data == zpt.data.numpy()).all()
+    assert (zut.data.numpy() == zpt.data.numpy()).all()
     # backward
-    assert (xut.grad == xpt.grad.numpy()).all()
-    assert (yut.grad == ypt.grad.numpy()).all()
+    assert (xut.grad.numpy() == xpt.grad.numpy()).all()
+    assert (yut.grad.numpy() == ypt.grad.numpy()).all()
 
 
 def test_sum2D_axis1():
 
-    xx = np.arange(2*3).reshape(2, 3)
-    yy = np.arange(2)
+    xx = np.arange(2*3).reshape(2, 3) * 1.
+    yy = np.arange(2) * 1.
 
     x = ugrad.Tensor(xx, requires_grad=True)
     y = ugrad.Tensor(yy, requires_grad=True)
@@ -109,10 +109,10 @@ def test_sum2D_axis1():
     xpt, ypt, zpt = x, y, z
 
     # forward
-    assert (zut.data == zpt.data.numpy()).all()
+    assert (zut.data.numpy() == zpt.data.numpy()).all()
     # backward
-    assert (xut.grad == xpt.grad.numpy()).all()
-    assert (yut.grad == ypt.grad.numpy()).all()
+    assert (xut.grad.numpy() == xpt.grad.numpy()).all()
+    assert (yut.grad.numpy() == ypt.grad.numpy()).all()
 
 
 def test_matmul():
@@ -140,16 +140,16 @@ def test_matmul():
     xpt, ypt, zpt = x, y, z
 
     # forward
-    assert (zut.data == zpt.data.numpy()).all()
+    assert (zut.data.numpy() == zpt.data.numpy()).all()
     # backward
-    assert (xut.grad == xpt.grad.numpy()).all()
-    assert (yut.grad == ypt.grad.numpy()).all()
+    assert (xut.grad.numpy() == xpt.grad.numpy()).all()
+    assert (yut.grad.numpy() == ypt.grad.numpy()).all()
 
 
 def test_matmul2():
 
-    xx = np.arange(5*2*3).reshape(5, 2, 3) 
-    yy = np.arange(5*3*2).reshape(5, 3, 2)
+    xx = np.arange(5*2*3).reshape(5, 2, 3) * 1.
+    yy = np.arange(5*3*2).reshape(5, 3, 2) * 1.
 
     x = ugrad.Tensor(xx, requires_grad=True)
     y = ugrad.Tensor(yy, requires_grad=True)
@@ -166,10 +166,10 @@ def test_matmul2():
     xpt, ypt, zpt = x, y, z
 
     # forward
-    assert (zut.data == zpt.data.numpy()).all()
+    assert (zut.data.numpy() == zpt.data.numpy()).all()
     # backward
-    assert (xut.grad == xpt.grad.numpy()).all()
-    assert (yut.grad == ypt.grad.numpy()).all()
+    assert (xut.grad.numpy() == xpt.grad.numpy()).all()
+    assert (yut.grad.numpy() == ypt.grad.numpy()).all()
 
 
 def test_matmul_broadcast():
@@ -189,10 +189,10 @@ def test_matmul_broadcast():
     xpt, ypt, zpt = x, y, z
 
     # forward
-    assert (zut.data == zpt.data.numpy()).all()
+    assert (zut.data.numpy() == zpt.data.numpy()).all()
     # backward
-    assert (xut.grad == xpt.grad.numpy()).all()
-    assert (yut.grad == ypt.grad.numpy()).all()
+    assert (xut.grad.numpy() == xpt.grad.numpy()).all()
+    assert (yut.grad.numpy() == ypt.grad.numpy()).all()
 
 
 def test_matmul_broadcast2():
@@ -216,11 +216,11 @@ def test_matmul_broadcast2():
     xpt, ypt, cpt, zpt = x, y, c, z
 
     # forward
-    assert (zut.data == zpt.data.numpy()).all()
+    assert (zut.data.numpy() == zpt.data.numpy()).all()
     # backward
-    assert (xut.grad == xpt.grad.numpy()).all()
-    assert (yut.grad == ypt.grad.numpy()).all()
-    assert (cut.grad == cpt.grad.numpy()).all()
+    assert (xut.grad.numpy() == xpt.grad.numpy()).all()
+    assert (yut.grad.numpy() == ypt.grad.numpy()).all()
+    assert (cut.grad.numpy() == cpt.grad.numpy()).all()
 
 
 def test_matmul_broadcast3():
@@ -244,11 +244,11 @@ def test_matmul_broadcast3():
     xpt, ypt, cpt, zpt = x, y, c, z
 
     # forward
-    assert (zut.data == zpt.data.numpy()).all()
+    assert (zut.data.numpy() == zpt.data.numpy()).all()
     # backward
-    assert (xut.grad == xpt.grad.numpy()).all()
-    assert (yut.grad == ypt.grad.numpy()).all()
-    assert (cut.grad == cpt.grad.numpy()).all()
+    assert (xut.grad.numpy() == xpt.grad.numpy()).all()
+    assert (yut.grad.numpy() == ypt.grad.numpy()).all()
+    assert (cut.grad.numpy() == cpt.grad.numpy()).all()
 
 
 def test_matmul_broadcast4():
@@ -295,20 +295,20 @@ def test_matmul_broadcast4():
 
     tol = 1e-6
     # forward
-    assert (np.abs(zut.data - zpt.data.numpy()) < tol).all()
+    assert (np.abs(zut.data.numpy() - zpt.data.numpy()) < tol).all()
 
     # backward
-    assert (np.abs(xut.grad - xpt.grad.numpy()) < tol).all()
-    assert (np.abs(yut.grad - ypt.grad.numpy()) < tol).all()
-    assert (np.abs(cut.grad - cpt.grad.numpy()) < tol).all()
-    assert (np.abs(dut.grad - dpt.grad.numpy()) < tol).all()
-    assert (np.abs(eut.grad - ept.grad.numpy()) < tol).all()
-    assert (np.abs(fut.grad - fpt.grad.numpy()) < tol).all()
-    assert (np.abs(gut.grad - gpt.grad.numpy()) < tol).all()
-    assert (np.abs(hut.grad - hpt.grad.numpy()) < tol).all()
+    assert (np.abs(xut.grad.numpy() - xpt.grad.numpy()) < tol).all()
+    assert (np.abs(yut.grad.numpy() - ypt.grad.numpy()) < tol).all()
+    assert (np.abs(cut.grad.numpy() - cpt.grad.numpy()) < tol).all()
+    assert (np.abs(dut.grad.numpy() - dpt.grad.numpy()) < tol).all()
+    assert (np.abs(eut.grad.numpy() - ept.grad.numpy()) < tol).all()
+    assert (np.abs(fut.grad.numpy() - fpt.grad.numpy()) < tol).all()
+    assert (np.abs(gut.grad.numpy() - gpt.grad.numpy()) < tol).all()
+    assert (np.abs(hut.grad.numpy() - hpt.grad.numpy()) < tol).all()
 
 
-def test_liear_mse():
+def test_linear_mse():
 
     x = ugrad.Tensor([[1.0, 2.0], 
                       [4.0, 5.0], 
@@ -335,14 +335,14 @@ def test_liear_mse():
     xpt, Wpt, ypt, zpt = x, W, y, z
 
     # forward
-    assert (zut.data == zpt.data.numpy()).all()
+    assert (zut.data.numpy() == zpt.data.numpy()).all()
     # backward
-    assert (xut.grad == xpt.grad.numpy()).all()
-    assert (Wut.grad == Wpt.grad.numpy()).all()
-    assert (yut.grad == ypt.grad.numpy()).all()
+    assert (xut.grad.numpy() == xpt.grad.numpy()).all()
+    assert (Wut.grad.numpy() == Wpt.grad.numpy()).all()
+    assert (yut.grad.numpy() == ypt.grad.numpy()).all()
 
 
-def test_liear_bce():
+def test_linear_bce():
 
     x = ugrad.Tensor([[1.0, 2.0], 
                       [4.0, 5.0], 
@@ -373,16 +373,16 @@ def test_liear_bce():
 
     tol = 1e-6
     # forward
-    assert (np.abs(zut.data - zpt.data.numpy()) < tol).all()
-    assert (np.abs(aut.data - apt.data.numpy()) < tol).all()
+    assert (np.abs(zut.data.numpy() - zpt.data.numpy()) < tol).all()
+    assert (np.abs(aut.data.numpy() - apt.data.numpy()) < tol).all()
 
     # backward
-    assert (np.abs(xut.grad - xpt.grad.numpy()) < tol).all()
-    assert (np.abs(Wut.grad - Wpt.grad.numpy()) < tol).all()
-    assert (np.abs(yut.grad - ypt.grad.numpy()) < tol).all()
+    assert (np.abs(xut.grad.numpy() - xpt.grad.numpy()) < tol).all()
+    assert (np.abs(Wut.grad.numpy() - Wpt.grad.numpy()) < tol).all()
+    assert (np.abs(yut.grad.numpy() - ypt.grad.numpy()) < tol).all()
 
 
-def test_liear_bias():
+def test_linear_bias():
 
     x = ugrad.Tensor([[1.0, 2.0], 
                       [4.0, -5.0], 
@@ -414,17 +414,17 @@ def test_liear_bias():
 
     tol = 1e-6
     # forward
-    assert (np.abs(zut.data - zpt.data.numpy()) < tol).all()
-    assert (np.abs(y_hatut.data - y_hatpt.data.numpy()) < tol).all()
+    assert (np.abs(zut.data.numpy() - zpt.data.numpy()) < tol).all()
+    assert (np.abs(y_hatut.data.numpy() - y_hatpt.data.numpy()) < tol).all()
 
     # backward
-    assert (np.abs(xut.grad - xpt.grad.numpy()) < tol).all()
-    assert (np.abs(Wut.grad - Wpt.grad.numpy()) < tol).all()
-    assert (np.abs(but.grad - bpt.grad.numpy()) < tol).all()
-    assert (np.abs(yut.grad - ypt.grad.numpy()) < tol).all()
+    assert (np.abs(xut.grad.numpy() - xpt.grad.numpy()) < tol).all()
+    assert (np.abs(Wut.grad.numpy() - Wpt.grad.numpy()) < tol).all()
+    assert (np.abs(but.grad.numpy() - bpt.grad.numpy()) < tol).all()
+    assert (np.abs(yut.grad.numpy() - ypt.grad.numpy()) < tol).all()
 
 
-def test_liear_mul():
+def test_linear_mul():
 
     x = ugrad.Tensor([[1.0, 2.0], 
                       [4.0, -5.0], 
@@ -456,16 +456,16 @@ def test_liear_mul():
 
     tol = 1e-6
     # forward
-    assert (np.abs(zut.data - zpt.data.numpy()) < tol).all()
-    assert (np.abs(y_hatut.data - y_hatpt.data.numpy()) < tol).all()
+    assert (np.abs(zut.data.numpy() - zpt.data.numpy()) < tol).all()
+    assert (np.abs(y_hatut.data.numpy() - y_hatpt.data.numpy()) < tol).all()
 
     # backward
-    assert (np.abs(xut.grad - xpt.grad.numpy()) < tol).all()
-    assert (np.abs(Wut.grad - Wpt.grad.numpy()) < tol).all()
-    assert (np.abs(but.grad - bpt.grad.numpy()) < tol).all()
-    assert (np.abs(yut.grad - ypt.grad.numpy()) < tol).all()
+    assert (np.abs(xut.grad.numpy() - xpt.grad.numpy()) < tol).all()
+    assert (np.abs(Wut.grad.numpy() - Wpt.grad.numpy()) < tol).all()
+    assert (np.abs(but.grad.numpy() - bpt.grad.numpy()) < tol).all()
+    assert (np.abs(yut.grad.numpy() - ypt.grad.numpy()) < tol).all()
 
-    
+
 def test_log_softmax():
     xx = np.array([[1., 2., 3., 3., 2., 1., 0.], [2.0, 2.5, -3., -3., 2.5, 1.0, 0.]])
     yy = np.array([[0., 0., 1., 1., 0., 0., 0.], [1., 1., 0., 0., 1., 0., 0.]])
@@ -490,13 +490,12 @@ def test_log_softmax():
 
     tol = 1e-6
     # forward
-    assert (np.abs(lut.data - lpt.data.numpy()) < tol).all()
-    assert (np.abs(y_hatut.data - y_hatpt.data.numpy()) < tol).all()
+    assert (np.abs(lut.data.numpy() - lpt.data.numpy()) < tol).all()
+    assert (np.abs(y_hatut.data.numpy() - y_hatpt.data.numpy()) < tol).all()
 
     # backward
-    assert (np.abs(xut.grad - xpt.grad.numpy()) < tol).all()
-    assert (np.abs(yut.grad - ypt.grad.numpy()) < tol).all()
-
+    assert (np.abs(xut.grad.numpy() - xpt.grad.numpy()) < tol).all()
+    assert (np.abs(yut.grad.numpy() - ypt.grad.numpy()) < tol).all()
 
 def test_log_softmax_celoss():
     xx = np.array([[1., 2., 3.5, 3., 2., 1., 0.], [2.0, 2.5, -3., -3., 2.5, 1.0, 0.]])
@@ -521,9 +520,9 @@ def test_log_softmax_celoss():
 
     tol = 1e-6
     # forward
-    assert (np.abs(lut.data - lpt.data.numpy()) < tol).all()
+    assert (np.abs(lut.data.numpy() - lpt.data.numpy()) < tol).all()
 
     # backward
-    assert (np.abs(xut.grad - xpt.grad.numpy()) < tol).all()
-    assert (np.abs(yut.grad - ypt.grad.numpy()) < tol).all()
+    assert (np.abs(xut.grad.numpy() - xpt.grad.numpy()) < tol).all()
+    assert (np.abs(yut.grad.numpy() - ypt.grad.numpy()) < tol).all()
 
