@@ -1,9 +1,8 @@
 #include "tensor.h"
 
 
-template <typename T> struct type_code;
-template <> struct type_code<double> { static constexpr int value = DOUBLE_DTYPE; };
-template <> struct type_code<long> { static constexpr int value = LONG_DTYPE; }; 
+constexpr int type_code(double) { return DOUBLE_DTYPE; }
+constexpr int type_code(long) { return LONG_DTYPE; }
 
 
 Tensor *dispatch(Tensor *t, auto op, auto func, auto...args) {
@@ -43,7 +42,7 @@ Tensor *dispatch_unary_reduce_op(auto *tptr, Tensor *t, auto func, int axis){
     shape[axis] = 1;
 
     using restype = std::remove_pointer_t<decltype(tptr)>;
-    Tensor *res = create_tensor(create_storage(numel * sizeof(restype), t->device), shape, t->ndim, type_code<restype>::value);
+    Tensor *res = create_tensor(create_storage(numel * sizeof(restype), t->device), shape, t->ndim, type_code(restype{}));
     free(shape);
 
     auto resptr = (restype *) res->storage->data;
@@ -64,8 +63,8 @@ Tensor *dispatch_argmax(auto *tptr, Tensor *t, auto func, int axis){
     shape[axis] = 1;
 
     using max_ttype = std::remove_pointer_t<decltype(tptr)>;
-    Tensor *res = create_tensor(create_storage(numel * sizeof(long), t->device), shape, t->ndim, type_code<long>::value);
-    Tensor *max_t = create_tensor(create_storage(numel * sizeof(max_ttype), t->device), shape, t->ndim, type_code<max_ttype>::value);
+    Tensor *res = create_tensor(create_storage(numel * sizeof(long), t->device), shape, t->ndim, type_code(long{}));
+    Tensor *max_t = create_tensor(create_storage(numel * sizeof(max_ttype), t->device), shape, t->ndim, type_code(max_ttype{}));
     free(shape);
 
     auto *resptr = (long *) res->storage->data;
@@ -80,7 +79,7 @@ Tensor *dispatch_argmax(auto *tptr, Tensor *t, auto func, int axis){
 
 Tensor *dispatch_unary_op(auto*tptr, Tensor *t, auto func){
     using restype = std::remove_pointer_t<decltype(tptr)>;
-    Tensor *res = create_tensor(create_storage(t->numel * sizeof(restype), t->device), t->shape, t->ndim, type_code<restype>::value);
+    Tensor *res = create_tensor(create_storage(t->numel * sizeof(restype), t->device), t->shape, t->ndim, type_code(restype{}));
     auto *resptr = (restype *) res->storage->data;
 
     func(tptr, resptr, t, res->numel);
@@ -89,7 +88,7 @@ Tensor *dispatch_unary_op(auto*tptr, Tensor *t, auto func){
 }
 
 Tensor *dispatch_unary_op_d(auto *tptr, Tensor *t, auto func){
-    Tensor *res = create_tensor(create_storage(t->numel * sizeof(double), t->device), t->shape, t->ndim, type_code<double>::value);
+    Tensor *res = create_tensor(create_storage(t->numel * sizeof(double), t->device), t->shape, t->ndim, type_code(double{}));
     auto *resptr = (double *) res->storage->data;
 
     func(tptr, resptr, t, res->numel);
@@ -98,7 +97,7 @@ Tensor *dispatch_unary_op_d(auto *tptr, Tensor *t, auto func){
 }
 
 Tensor *dispatch_unary_op_d_xtra(auto *tptr, Tensor *t, auto func, double xtra){
-    Tensor *res = create_tensor(create_storage(t->numel * sizeof(double), t->device), t->shape, t->ndim, type_code<double>::value);
+    Tensor *res = create_tensor(create_storage(t->numel * sizeof(double), t->device), t->shape, t->ndim, type_code(double{}));
     auto *resptr = (double *) res->storage->data;
 
     func(tptr, resptr, xtra, t, res->numel);
@@ -117,7 +116,7 @@ Tensor *dispatch_binary_reduce_op(auto *tptr, auto *t2ptr, Tensor *t, Tensor *t2
     shape[axis] = 1;
     
     using restype = std::common_type_t<std::remove_pointer_t<decltype(tptr)>, std::remove_pointer_t<decltype(t2ptr)>>;
-    Tensor *res = create_tensor(create_storage(numel * sizeof(restype), t->device), shape, t->ndim, type_code<restype>::value);
+    Tensor *res = create_tensor(create_storage(numel * sizeof(restype), t->device), shape, t->ndim, type_code(restype{}));
     free(shape);
     auto *resptr = (restype *) res->storage->data;
 
@@ -128,7 +127,7 @@ Tensor *dispatch_binary_reduce_op(auto *tptr, auto *t2ptr, Tensor *t, Tensor *t2
 
 Tensor *dispatch_binary_op(auto *tptr, auto *t2ptr, Tensor *t, Tensor *t2, auto func) {
     using restype = std::common_type_t<std::remove_pointer_t<decltype(tptr)>, std::remove_pointer_t<decltype(t2ptr)>>;
-    Tensor *res = create_tensor(create_storage(t->numel * sizeof(restype), t->device), t->shape, t->ndim, type_code<restype>::value);
+    Tensor *res = create_tensor(create_storage(t->numel * sizeof(restype), t->device), t->shape, t->ndim, type_code(restype{}));
     auto *resptr = (restype *) res->storage->data;
 
     func(tptr, t2ptr, resptr, t, t2, res->numel);
@@ -137,7 +136,7 @@ Tensor *dispatch_binary_op(auto *tptr, auto *t2ptr, Tensor *t, Tensor *t2, auto 
 }
 
 Tensor *dispatch_binary_op_l(auto *tptr, auto *t2ptr, Tensor *t, Tensor *t2, auto func) {
-    Tensor *res = create_tensor(create_storage(t->numel * sizeof(long), t->device), t->shape, t->ndim, type_code<long>::value);
+    Tensor *res = create_tensor(create_storage(t->numel * sizeof(long), t->device), t->shape, t->ndim, type_code(long{}));
     auto *resptr = (long *) res->storage->data;
 
     func(tptr, t2ptr, resptr, t, t2, res->numel);
