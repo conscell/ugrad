@@ -424,23 +424,35 @@ class Tensor:
         Returns:
             None
         """
-        stack = [(self.grad_fn, gradient if gradient is not None else np.ones_like(self.data))]
-        visited = []
-        while stack:
-            grad_fn, grad = stack.pop()
-            if not grad_fn:
-                continue
-            next_fns = grad_fn.next_functions
-            res_for_next = grad_fn(grad)
-            if grad_fn.name != "accum":
-                visited.append(grad_fn)
-            if next_fns == ():
-                continue
-            for n, r in zip(next_fns, res_for_next):
-                stack.append((n, r))
+        # Toposort
+    
+        topo = []
+        visited = set()
+        
+        def build_topo(grad_fn):
+            if grad_fn not in visited and grad_fn is not None:
+                visited.add(grad_fn)
+                for nxt in grad_fn.next_functions:
+                    build_topo(nxt)
+                topo.append(grad_fn)
+        
+        build_topo(self.grad_fn)
+
+        self.grad_fn.grad = gradient if gradient is not None else np.ones_like(self.data)
+        
+        for grad_fn in reversed(topo):
+            for n, r in zip(grad_fn.next_functions, grad_fn(grad_fn.grad)):
+                if n is not None:
+                    if n.grad is None:
+                        n.grad = r
+                    else:
+                        n.grad += r
+
         if not retain_graph:
             for grad_fn in visited:
-                grad_fn.grad_fn = None
+                grad_fn.grad = None
+                if grad_fn.name != "accum":
+                    grad_fn.grad_fn = None
 
 
 class Node:
@@ -456,6 +468,7 @@ class Node:
             name: The name of the gradient function node (optional).
         """
         self.grad_fn = grad_fn
+        self.grad = None
         self.next_functions = next_functions
         self.name = name
 
