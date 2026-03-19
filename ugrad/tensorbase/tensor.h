@@ -27,7 +27,7 @@ typedef struct {
     int device;
 } Tensor;
 
-Storage *create_storage(int nbytes, int device);
+extern "C" Storage *create_storage(int nbytes, int device);
 Storage *clone_storage(Storage *s);
 extern "C" Storage *cc_storage(int nbytes, void *data);
 extern "C" Tensor *create_tensor(Storage *storage, int *shape, int ndim, int dtype);
@@ -46,6 +46,9 @@ extern "C" Tensor *gt(Tensor *t, Tensor *t2);
 extern "C" Tensor *eq(Tensor *t, Tensor *t2);
 extern "C" Tensor *add(Tensor *t, Tensor *t2);
 extern "C" Tensor *mul(Tensor *t, Tensor *t2);
+extern "C" void assign(Tensor *t, Tensor *t2);
+extern "C" void add_at(Tensor *t, Tensor *idx, Tensor *t2);
+extern "C" void uniform(Tensor *t, double a, double b);
 extern "C" Tensor *maximum(Tensor *t, Tensor *t2);
 extern "C" Tensor *mul_reduce(Tensor *t, Tensor *t2, int axis);
 extern "C" Tensor *pow_t(Tensor *t, double x);
@@ -53,5 +56,6 @@ extern "C" Tensor *exp_t(Tensor *t);
 extern "C" Tensor *log_t(Tensor *t);
 extern "C" Tensor *tanh_t(Tensor *t);
 extern "C" Tensor *contiguous(Tensor *t);
+extern "C" Tensor *arange(int start, int stop, int step, int device);
 
 #endif

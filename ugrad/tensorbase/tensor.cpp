@@ -9,6 +9,7 @@
 #endif
 
 
+extern "C"
 Storage *create_storage(int nbytes, int device){
     if (device == CPU_DEVICE)
         return create_cpu_storage(nbytes);
@@ -297,6 +298,38 @@ Tensor *mul(Tensor *t, Tensor *t2){
 }
 
 extern "C"
+void assign(Tensor *t, Tensor *t2){
+    if(t->device == CPU_DEVICE)
+        assign_cpu(t, t2);
+    #ifdef CUDA_H
+    else
+        assign_cuda(t, t2);
+    #endif
+}
+
+extern "C"
+void add_at(Tensor *t, Tensor *idx, Tensor *t2){
+    if(t->device == CPU_DEVICE)
+        add_at_cpu(t, idx, t2);
+    #ifdef CUDA_H
+    else
+        add_at_cuda(t, idx, t2);
+    #endif
+
+}
+
+extern "C"
+void uniform(Tensor *t, double a, double b){
+    if(t->device == CPU_DEVICE)
+        uniform_cpu(t, a, b);
+    #ifdef CUDA_H
+    else
+        uniform_cuda(t, a, b);
+    #endif
+
+}
+
+extern "C"
 Tensor *maximum(Tensor *t, Tensor *t2){
     if(t->device == CPU_DEVICE)
         return maximum_cpu(t, t2);
@@ -375,6 +408,24 @@ Tensor *contiguous(Tensor *t){
     #ifdef CUDA_H
     else
         return contiguous_cuda(t);
+    #endif
+
+    return NULL;
+}
+
+extern "C"
+Tensor *arange(int start, int stop, int step, int device){
+    int numel = (stop - start) / step + (((stop - start) % step) ? 1 : 0);
+    int shape[] = {numel};
+
+    Storage *storage = create_storage(sizeof(long) * numel, device);
+    Tensor *t = create_tensor(storage, shape, 1, LONG_DTYPE);
+
+    if(device == CPU_DEVICE)
+        return arange_cpu(t, start, stop, step);
+    #ifdef CUDA_H
+    else
+        return arange_cuda(t, start, stop, step);
     #endif
 
     return NULL;

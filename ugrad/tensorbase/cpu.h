@@ -13,6 +13,9 @@ Tensor *gt_cpu(Tensor *t, Tensor *t2);
 Tensor *eq_cpu(Tensor *t, Tensor *t2);
 Tensor *add_cpu(Tensor *t, Tensor *t2);
 Tensor *mul_cpu(Tensor *t, Tensor *t2);
+void assign_cpu(Tensor *t, Tensor *t2);
+void add_at_cpu(Tensor *t, Tensor *idx, Tensor *t2);
+void uniform_cpu(Tensor *t, double a, double b);
 Tensor *maximum_cpu(Tensor *t, Tensor *t2);
 Tensor *mul_reduce_cpu(Tensor *t, Tensor *t2, int axis);
 Tensor *pow_cpu(Tensor *t, double x);
@@ -20,5 +23,6 @@ Tensor *exp_cpu(Tensor *t);
 Tensor *log_cpu(Tensor *t);
 Tensor *tanh_cpu(Tensor *t);
 Tensor *contiguous_cpu(Tensor *t);
+Tensor *arange_cpu(Tensor *t, int start, int stop, int step);
 
 #endif

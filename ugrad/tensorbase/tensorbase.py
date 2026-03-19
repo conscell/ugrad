@@ -36,6 +36,8 @@ module_dir = os.path.dirname(os.path.abspath(__file__))
 _C = ctypes.CDLL(os.path.join(module_dir, "libtensor.so"))
 _C.create_tensor.argtypes = [ctypes.POINTER(CStorage), ctypes.POINTER(ctypes.c_int), ctypes.c_int, ctypes.c_int]
 _C.create_tensor.restype = ctypes.POINTER(CTensor)
+_C.create_storage.argtypes = [ctypes.c_int, ctypes.c_int]
+_C.create_storage.restype = ctypes.POINTER(CStorage)
 _C.cc_storage.argtypes = [ctypes.c_int, ctypes.c_void_p]
 _C.cc_storage.restype = ctypes.POINTER(CStorage)
 _C.delete_tensor.argtypes = [ctypes.POINTER(CTensor)]
@@ -65,6 +67,12 @@ _C.add.argtypes = [ctypes.POINTER(CTensor), ctypes.POINTER(CTensor)]
 _C.add.restype = ctypes.POINTER(CTensor)
 _C.mul.argtypes = [ctypes.POINTER(CTensor), ctypes.POINTER(CTensor)]
 _C.mul.restype = ctypes.POINTER(CTensor)
+_C.assign.argtypes = [ctypes.POINTER(CTensor), ctypes.POINTER(CTensor)]
+_C.assign.restype = None
+_C.add_at.argtypes = [ctypes.POINTER(CTensor), ctypes.POINTER(CTensor), ctypes.POINTER(CTensor)]
+_C.add_at.restype = None
+_C.uniform.argtypes = [ctypes.POINTER(CTensor), ctypes.c_double, ctypes.c_double]
+_C.uniform.restype = None
 _C.maximum.argtypes = [ctypes.POINTER(CTensor), ctypes.POINTER(CTensor)]
 _C.maximum.restype = ctypes.POINTER(CTensor)
 _C.mul_reduce.argtypes = [ctypes.POINTER(CTensor), ctypes.POINTER(CTensor), ctypes.c_int]
@@ -79,10 +87,13 @@ _C.tanh_t.argtypes = [ctypes.POINTER(CTensor)]
 _C.tanh_t.restype = ctypes.POINTER(CTensor)
 _C.contiguous.argtypes = [ctypes.POINTER(CTensor)]
 _C.contiguous.restype = ctypes.POINTER(CTensor)
+_C.arange.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+_C.arange.restype = ctypes.POINTER(CTensor)
 
 dtypes = {"double": (0, ctypes.c_double), "long": (1, ctypes.c_long)}
 code2dtype = {0: "double", 1: "long"}
 npdtypes = {"float64": "double", "int64": "long"}
+inf = float("inf")
 
 def flatten(x, depth=1, shape=None):
     """
@@ -119,7 +130,7 @@ class TensorBase:
         data (TensorBase | CTensor ptr | np.ndarray | list | int | float): The input data to initialize the tensor.
         shape (tuple, optional): Shape (used when creating from lists).
         dtype (str, optional): Data type ('double' or 'long'). Defaults to inferred type.
-        device (str, optional): The device where the tensor will be stored ('cpu' or 'cuda'). Defaults to 'cpu'.
+        device (str, optional): The device on which to allocate the tensor ('cpu' or 'cuda'). Defaults to 'cpu'.
 
     Raises:
         TypeError: If the input data type is not supported.
@@ -235,7 +246,7 @@ class TensorBase:
         Moves the tensor to the specified device.
 
         Args:
-            device (str): Target device, either "cpu" or "cuda".
+            device (str): Target device, either 'cpu' or 'cuda'.
 
         Returns:
             TensorBase: A new tensor on the specified device if different, otherwise self.
@@ -318,34 +329,34 @@ class TensorBase:
             indices = indices[:ellipsis_idx] + (slice(None), ) * (self.ndim - len(indices) + 1)  + indices[ellipsis_idx + 1:]
         
         offset = 0 # This the offset into the flattened data based on the indices
-        for i in range(len(indices)):
-            if isinstance(indices[i], int):
+        for idx, dim, stride in zip(indices, self.shape, self.strides):
+            if isinstance(idx, int):
                 # For integer indices, calculate the offset directly
-                offset += indices[i] * self.strides[i]
+                offset += idx * stride
             else:
-                 # For slice indices, handle start, stop, and step values
-                start = indices[i].start if indices[i].start is not None else 0
-                stop = indices[i].stop if indices[i].stop is not None else self.shape[i]
+                # For slice indices, handle start, stop, and step values
+                start = idx.start if idx.start is not None else 0
+                stop = idx.stop if idx.stop is not None else dim
                 
-                if start < -self.shape[i]:
+                if start < -dim:
                     start = 0
                 elif start < 0:
-                    start = self.shape[i] + start
-                elif start > self.shape[i]:
-                    start = self.shape[i]
+                    start = dim + start
+                elif start > dim:
+                    start = dim
 
-                if stop < -self.shape[i]:
+                if stop < -dim:
                     stop = 0
                 elif stop < 0:
-                    stop = self.shape[i] + stop
-                elif stop > self.shape[i]:
-                    stop = self.shape[i]
+                    stop = dim + stop
+                elif stop > dim:
+                    stop = dim
 
-                step = indices[i].step if indices[i].step is not None else 1
+                step = idx.step if idx.step is not None else 1
 
-                offset += start * self.strides[i]
+                offset += start * stride
                 shape.append(-((stop - start) // -step))
-                strides.append(self.strides[i] * step)
+                strides.append(stride * step)
 
         # Extend the shape and strides with the remaining dimensions of the original tensor
         shape.extend(self.shape[len(indices):])
@@ -373,6 +384,31 @@ class TensorBase:
 
         return result
     
+    def __setitem__(self, indices, other):
+        """
+        Assigns values to the tensor at the specified indices.
+
+        Args:
+            indices (tuple): The indices of the elements to update. Can include integer indices, slices, or ellipsis.
+            other (TensorBase | int | float): The value to assign.
+        
+        Raises:
+            RuntimeError: If `other` cannot be broadcast to the shape of the indexed result.
+        """
+        if isinstance(other, float):
+            other = TensorBase(other, device=self.device)
+        elif isinstance(other, int):
+            other = TensorBase(other, dtype="long", device=self.device)
+        
+        result = self[indices]
+        # Broadcast if shapes are different
+        if result.shape != other.shape:
+            broadcast_shape = TensorBase.broadcast_shape(result.shape, other.shape)
+            if result.shape != broadcast_shape:
+                raise RuntimeError(f"Incorrect shape: {other.shape}")
+            other = other.broadcast_to(broadcast_shape)
+        _C.assign(result.data, other.data)
+
     def numpy(self):
         """
         Converts the tensor to a NumPy array.
@@ -403,6 +439,8 @@ class TensorBase:
             RuntimeError: If the new shape is incompatible with the number of elements in the tensor.
         """
         # Ensure that the new shape is correct
+        if isinstance(shape, int):
+            shape = (shape, )
         numel = 1
         for dim in shape:
             if dim > 0 or (dim == -1 and numel > 0):
@@ -442,6 +480,44 @@ class TensorBase:
             (ctypes.c_int * result.ndim)(*result.strides),
             result.ndim
         )
+        return result
+    
+    def as_strided(self, shape, strides):
+        """
+        Returns a view of the tensor with the specified shape and strides.
+
+        Args:
+            shape: The desired shape of the returned tensor.
+            strides: The desired strides of the returned tensor.
+
+        Returns:
+            TensorBase: A new tensor view sharing the same underlying data.
+
+        Raises:
+            AssertionError: If the number of dimensions in `shape` and `strides` do not match.
+            RuntimeError: If any dimension in `shape` is less than or equal to 0.
+        """
+        result_ndim = len(shape)
+        
+        assert result_ndim == len(strides)
+
+        for dim in shape:
+            if dim <= 0:
+                raise RuntimeError(f"Incorrect shape: {shape}")
+
+        result = TensorBase(self)
+        result.shape = shape
+        result.strides = strides
+        result.ndim = result_ndim
+
+        # Update the tensor metadata in the C backend
+        _C.update_tensor(
+            result.data,
+            (ctypes.c_int * result.ndim)(*result.shape),
+            (ctypes.c_int * result.ndim)(*result.strides),
+            result.ndim
+        )
+        result.numel = result.data.contents.numel
         return result
 
     def broadcast_to(self, shape):
@@ -491,6 +567,7 @@ class TensorBase:
         return result
 
     def broadcast_to_torch(self, shape):
+        """Expands the tensor to the given shape using PyTorch-like broadcasting semantics."""
         strides = []
         result_ndim = len(shape)
         shape_padded = (1, ) * (result_ndim - self.ndim) + self.shape
@@ -570,16 +647,110 @@ class TensorBase:
                 result_shape.append(left_axis)
         
         return tuple(result_shape)
-    
+
+    @staticmethod
+    def empty(shape, dtype=None, device="cpu"):
+        """
+        Creates an uninitialized tensor with the specified shape, data type, and device.
+
+        Args:
+            shape (tuple | int): The shape of the tensor. 
+            dtype (str, optional): Data type ('double' or 'long'). Defaults to 'double' if not provided.
+            device (str, optional): The device on which to allocate the tensor ('cpu' or 'cuda'). Defaults to 'cpu'.
+
+        Returns:
+            TensorBase: An uninitialized tensor with the specified shape, data type, and device.
+
+        Raises:
+            RuntimeError: If any dimension in `shape` is negative.
+        """
+        if isinstance(shape, int):
+            shape = (shape, )
+        numel = 1
+        for dim in shape:
+            if dim >= 0:
+                numel *= dim
+            else:
+                raise RuntimeError(f"Incorrect shape: {shape}")
+        dtype = dtype if dtype is not None else "double"
+        ndim = len(shape)
+       
+        data = _C.create_tensor(
+            _C.create_storage(ctypes.c_int(ctypes.sizeof(dtypes[dtype][1]) * numel), # nbytes
+                              ctypes.c_int(-1 if device =="cpu" else 0)              # device type
+                             ),                    # storage
+            (ctypes.c_int * ndim)(*shape),         # shape
+            ctypes.c_int(ndim),                    # ndim
+            ctypes.c_int(dtypes[dtype][0]),        # dtype code
+        )
+        return TensorBase(data)
+
+    @staticmethod
+    def zeros(shape, dtype=None, device="cpu"):
+        """
+        Creates a tensor filled with zeros.
+
+        Args:
+            shape (tuple | int): The shape of the tensor. 
+            dtype (str, optional): Data type ('double' or 'long'). Defaults to 'double' if not provided.
+            device (str, optional): The device on which to allocate the tensor ('cpu' or 'cuda'). Defaults to 'cpu'.
+
+        Returns:
+            TensorBase: A tensor of the specified shape filled with zeros.
+        """
+        result = TensorBase.empty(shape, dtype=dtype, device=device)
+        result[:] = 0
+        return result
+
+    @staticmethod
+    def ones(shape, dtype=None, device="cpu"):
+        """
+        Creates a tensor filled with ones.
+
+        Args:
+            shape (tuple | int): The shape of the tensor. 
+            dtype (str, optional): Data type ('double' or 'long'). Defaults to 'double' if not provided.
+            device (str, optional): The device on which to allocate the tensor ('cpu' or 'cuda'). Defaults to 'cpu'.
+
+        Returns:
+            TensorBase: A tensor of the specified shape filled with ones.
+        """
+        result = TensorBase.empty(shape, dtype=dtype, device=device)
+        result[:] = 1
+        return result
+
     @staticmethod
     def zeros_like(tensor):
         """Returns a tensor of the same shape as `tensor`, filled with zeros."""
-        return TensorBase(tensor) * 0
+        return TensorBase.zeros(shape=tensor.shape, dtype=tensor.dtype, device=tensor.device)
 
     @staticmethod
     def ones_like(tensor):
         """Returns a tensor of the same shape as `tensor`, filled with ones."""
-        return TensorBase(tensor) * 0 + 1
+        return TensorBase.ones(shape=tensor.shape, dtype=tensor.dtype, device=tensor.device)
+    
+    @staticmethod
+    def arange(start=0, stop=None, step=1, device="cpu"):
+        """
+        Creates a one-dimensional tensor containing evenly spaced values in the specified range.
+
+        Args:
+            start (int, optional): The starting value of the range. Defaults to 0.
+            stop (int): The end value of the range.
+            step (int, optional): The spacing between values. Defaults to 1.
+            device (str, optional): The device on which to allocate the tensor ('cpu' or 'cuda'). Defaults to 'cpu'.
+
+        Returns:
+            TensorBase: A one-dimensional tensor containing values in the specified range.
+
+        Raises:
+            AssertionError: If the range arguments are inconsistent.
+        """
+        if stop is None:
+            stop = start
+            start = 0
+        assert step !=0 and -((stop - start) // -step) >= 0
+        return TensorBase(_C.arange(ctypes.c_int(start), ctypes.c_int(stop), ctypes.c_int(step), ctypes.c_int(-1 if device =="cpu" else 0)))
     
     def expand_dims(self, axis):
         """
@@ -628,7 +799,7 @@ class TensorBase:
 
         return self.reshape(result_shape)
     
-    def swap_axes(self, axis1, axis2):
+    def swapaxes(self, axis1, axis2):
         """
         Swaps two axes of the tensor.
 
@@ -663,7 +834,7 @@ class TensorBase:
     def T(self):
         """Returns the transposed tensor."""
         if self.ndim > 1:
-            return self.swap_axes(-1, -2)
+            return self.swapaxes(-1, -2)
         else: 
             return self
     
@@ -909,6 +1080,39 @@ class TensorBase:
         res_data = _C.pow_t(self.data, float(other))
         return TensorBase(res_data)
     
+    def add_at(self, idx, other):
+        """
+        Accumulates values into the tensor at the specified indices in place.
+
+        Args:
+            idx (TensorBase): A tensor containing the indices where values will be added.
+            other (TensorBase | int | float): The value to add.
+
+        Raises:
+            RuntimeError: If `other` cannot be broadcast to the shape of `idx`.
+        """
+        if isinstance(other, float):
+            other = TensorBase(other, device=self.device)
+        elif isinstance(other, int):
+            other = TensorBase(other, dtype="long", device=self.device)
+         # Broadcast if shapes are different
+        if idx.shape != other.shape:
+            broadcast_shape = TensorBase.broadcast_shape(idx.shape, other.shape)
+            if idx.shape != broadcast_shape:
+                raise RuntimeError(f"Incorrect shape: {other.shape}")
+            other = other.broadcast_to(broadcast_shape)
+        if idx.device != self.device:
+            idx = idx.to(self.device)
+        if other.device != self.device:
+            other = other.to(self.device)
+
+        _C.add_at(self.data, idx.data, other.data)
+    
+    def uniform_(self, a, b):
+        """Fills the tensor with values sampled uniformly from [a, b) in place."""
+        _C.uniform(self.data, a, b)
+        return self
+
     def exp(self):
         """Computes the element-wise exponential of the tensor."""
         res_data = _C.exp_t(self.data)

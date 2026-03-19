@@ -25,6 +25,9 @@ Tensor *gt_cuda(Tensor *t, Tensor *t2);
 Tensor *eq_cuda(Tensor *t, Tensor *t2);
 Tensor *add_cuda(Tensor *t, Tensor *t2);
 Tensor *mul_cuda(Tensor *t, Tensor *t2);
+void assign_cuda(Tensor *t, Tensor *t2);
+void add_at_cuda(Tensor *t, Tensor *idx, Tensor *t2);
+void uniform_cuda(Tensor *t, double a, double b);
 Tensor *maximum_cuda(Tensor *t, Tensor *t2);
 Tensor *mul_reduce_cuda(Tensor *t, Tensor *t2, int axis);
 Tensor *pow_cuda(Tensor *t, double x);
@@ -32,6 +35,6 @@ Tensor *exp_cuda(Tensor *t);
 Tensor *log_cuda(Tensor *t);
 Tensor *tanh_cuda(Tensor *t);
 Tensor *contiguous_cuda(Tensor *t);
-
+Tensor *arange_cuda(Tensor *t, int start, int stop, int step);
 
 #endif

@@ -1,7 +1,6 @@
-import numpy as np
 from ..tensor import Tensor
 from ..tensorbase import TensorBase
-
+from .functional import conv2d, avg_pool2d, max_pool2d
 
 class Module:
     def __init__(self):
@@ -104,10 +103,10 @@ class Linear(Module):
 
         # Initialize weight and bias with random values
         bound = self.in_features ** -0.5
-        self.weight = Tensor(TensorBase(np.random.uniform(-bound, bound, (out_features, in_features)), dtype="double"), 
+        self.weight = Tensor(TensorBase.empty((out_features, in_features), dtype="double").uniform_(-bound, bound),
                              requires_grad=True, 
                              name="w_" + name)
-        self.bias = Tensor(TensorBase(np.random.uniform(-bound, bound, (out_features, )), dtype="double"), 
+        self.bias = Tensor(TensorBase.empty((out_features, ), dtype="double").uniform_(-bound, bound), 
                            requires_grad=True, 
                            name="b_" + name)
 
@@ -122,3 +121,127 @@ class Linear(Module):
             The result of the forward pass.
         """
         return (inp @ self.weight.T + self.bias)
+
+
+
+class Conv2d(Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, bias=True, name=""):
+        """
+        2D Convolutional layer applies a 2D convolution to the input.
+
+        Args:
+            in_channels: Number of input channels.
+            out_channels: Number of filters (output channels).
+            kernel_size: Size of the convolutional filter.
+            stride: Step size for moving the filter across the input.
+            padding: Number of elements to pad around the input.
+            dilation: Dilation factor for increasing the receptive field of the filter.
+            bias: If True, a bias term is added to the output.
+            name: The name of the Conv2d layer (optional).
+        """
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = (kernel_size, kernel_size) if isinstance(kernel_size, int) else kernel_size
+        self.stride = (stride, stride) if isinstance(stride, int) else stride
+        self.padding = (padding, padding) if isinstance(padding, int) else padding
+        self.dilation = (dilation, dilation) if isinstance(dilation, int) else dilation
+        self.name = name
+
+        # Initialize weight and bias with random values
+        bound = (self.in_channels * self.kernel_size[0] * self.kernel_size[1]) ** -0.5
+        self.weight = Tensor(TensorBase.empty((out_channels, 
+                                               in_channels, 
+                                               self.kernel_size[0],
+                                               self.kernel_size[1])).uniform_(-bound, bound),
+                             requires_grad=True, 
+                             name="w_" + name)
+        if bias:
+            self.bias = Tensor(TensorBase.empty((out_channels, )).uniform_(-bound, bound),
+                            requires_grad=True, 
+                            name="b_" + name)
+        else:
+            self.bias = None
+
+    def forward(self, inp):
+        """
+        Perform a forward pass through the Conv2d layer.
+
+        Args:
+            inp: The input tensor.
+
+        Returns:
+            The result of the forward pass.
+        """
+        return conv2d(inp, self.weight, bias=self.bias, 
+                      stride=self.stride, padding=self.padding, dilation=self.dilation)
+
+
+class AvgPool2d(Module):
+    def __init__(self, kernel_size, stride=None, padding=0, name=""):
+        """
+        AvgPool2d layer applies a 2D average pooling to the input.
+
+        Args:
+            kernel_size: Size of the pooling window.
+            stride: Step size for moving the pooling window across the input. 
+            padding: Number of elements to pad around the input.
+            name: The name of the AvgPool2d layer (optional).
+        """
+        super().__init__()
+        self.kernel_size = (kernel_size, kernel_size) if isinstance(kernel_size, int) else kernel_size
+        if stride is None:
+            self.stride = self.kernel_size
+        elif isinstance(stride, int):
+            self.stride = (stride, stride)
+        else:
+            self.stride = stride
+        self.padding = (padding, padding) if isinstance(padding, int) else padding
+        self.name = name
+
+    def forward(self, inp):
+        """
+        Perform a forward pass through the AvgPool2d layer.
+
+        Args:
+            inp: The input tensor.
+
+        Returns:
+            The result of the forward pass.
+        """
+        return avg_pool2d(inp, self.kernel_size, stride=self.stride, padding=self.padding)
+    
+
+class MaxPool2d(Module):
+    def __init__(self, kernel_size, stride=None, padding=0, name=""):
+        """
+        MaxPool2d layer applies a 2D maximum pooling to the input.
+
+        Args:
+            kernel_size: Size of the pooling window.
+            stride: Step size for moving the pooling window across the input. 
+            padding: Number of elements to pad around the input.
+            name: The name of the MaxPool2d layer (optional).
+        """
+        super().__init__()
+        self.kernel_size = (kernel_size, kernel_size) if isinstance(kernel_size, int) else kernel_size
+        if stride is None:
+            self.stride = self.kernel_size
+        elif isinstance(stride, int):
+            self.stride = (stride, stride)
+        else:
+            self.stride = stride
+        self.padding = (padding, padding) if isinstance(padding, int) else padding
+        self.name = name
+
+    def forward(self, inp):
+        """
+        Perform a forward pass through the MaxPool2d layer.
+
+        Args:
+            inp: The input tensor.
+
+        Returns:
+            The result of the forward pass.
+        """
+        return max_pool2d(inp, self.kernel_size, stride=self.stride, padding=self.padding)

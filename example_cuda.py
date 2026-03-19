@@ -10,7 +10,7 @@ def main():
     seed = 1717
     np.random.seed(seed)
     num_epochs = 10
-    batch_size = 200
+    batch_size = 128
 
     from sklearn.datasets import fetch_openml
     from sklearn.model_selection import train_test_split
@@ -18,17 +18,18 @@ def main():
     
     X, y = fetch_openml("mnist_784", version=1, return_X_y=True, as_frame=False, parser='liac-arff')
     X, y = shuffle(X, y, random_state=42)
+    y = y.astype(np.int64)
     X = X[:12000]
     y = y[:12000]
-    y = y.astype(np.int64)
+    y = np.eye(10)[y]
     # Scale images to the [0, 1] range
     X /= 255.
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.01, random_state=seed)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=seed)
     print(f"{X_train.shape=} {X_test.shape=} {y_train.shape=} {y_test.shape=}")
 
     inputs_t = ugrad.Tensor(X_test)
-    labels_t = ugrad.Tensor(np.eye(10)[y_test])
+    labels_t = ugrad.Tensor(y_test)
     print(f"{labels_t.data[0]=}")
     inputs_t.data = inputs_t.data.to("cuda")
     labels_t.data = labels_t.data.to("cuda")
@@ -56,16 +57,15 @@ def main():
     scheduler = ugrad.optim.lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.75, total_iters=num_epochs)
 
     num_batches = -(-X_train.shape[0] // batch_size)
+    num_batches_t = -(-X_test.shape[0] // batch_size)
 
     for k in range(num_epochs):
 
         accuracy = 0
         train_loss = 0
         for batch in range(num_batches):
-            inputs = ugrad.Tensor(X_train[batch * batch_size:(batch + 1) * batch_size])
-            labels = ugrad.Tensor(np.eye(10)[y_train[batch * batch_size:(batch + 1) * batch_size]])
-            inputs.data = inputs.data.to("cuda")
-            labels.data = labels.data.to("cuda")
+            inputs = ugrad.Tensor(X_train[batch * batch_size:(batch + 1) * batch_size]).to("cuda")
+            labels = ugrad.Tensor(y_train[batch * batch_size:(batch + 1) * batch_size]).to("cuda")
 
             # Forward
             preds = model(inputs)
@@ -84,13 +84,20 @@ def main():
         scheduler.step()
         accuracy /= X_train.shape[0]
         train_loss /= X_train.shape[0]
-      
-        with ugrad.no_grad():
-            preds_t = model(inputs_t)
-            loss_t = F.nll_loss(preds_t, labels_t)
 
-        loss_t = loss_t.data.to("cpu").item()
-        accuracy_t = int((preds_t.data.argmax(-1) == labels_t.data.argmax(-1)).sum().to("cpu").item()) / X_test.shape[0]
+        accuracy_t = 0
+        loss_t = 0
+        with ugrad.no_grad():
+            for batch in range(num_batches_t):
+                inputs_t = ugrad.Tensor(X_test[batch * batch_size:(batch + 1) * batch_size]).to("cuda")
+                labels_t = ugrad.Tensor(y_test[batch * batch_size:(batch + 1) * batch_size]).to("cuda")
+                
+                preds_t = model(inputs_t)
+                loss_t += F.nll_loss(preds_t, labels_t).data.to("cpu").item()
+                accuracy_t += int((preds_t.data.argmax(-1) == labels_t.data.argmax(-1)).sum().to("cpu").item())
+        
+        accuracy_t /= X_test.shape[0]
+        loss_t /= X_test.shape[0]
 
         print(f"Epoch {k+1} loss {train_loss:.6f}, accuracy {accuracy * 100:.6f}%  test loss {loss_t:.6f}, test accuracy {accuracy_t * 100:.6f}% lr {optimizer.lr:.6f}")
 

@@ -265,6 +265,64 @@ Tensor *mul_cpu(Tensor *t, Tensor *t2) {
 }
 
 
+void assign_kernel_cpu(auto *tptr, auto *t2ptr, Tensor *t, Tensor *t2, int i) {
+    tptr[storage_idx(t, i)] = t2ptr[storage_idx(t2, i)];
+}
+
+void launch_assign_kernel_cpu(auto *tptr, auto *t2ptr, Tensor *t, Tensor *t2, int numel) {
+    #pragma omp parallel for
+    for (int i=0; i < numel; i++)
+        assign_kernel_cpu(tptr, t2ptr, t, t2, i);
+}
+
+void assign_cpu(Tensor *t, Tensor *t2) {
+    dispatch(t, t2,
+        [](auto... args){return dispatch_binary_inplace_op(args...);}, 
+        [](auto... args){launch_assign_kernel_cpu(args...);}
+    );
+}
+
+
+void add_at_kernel_cpu(auto *tptr, auto *idxptr, auto *t2ptr, Tensor *t, Tensor *idx, Tensor *t2, int i) {
+    #pragma omp atomic update
+    tptr[storage_idx(t, idxptr[storage_idx(idx, i)])] += t2ptr[storage_idx(t2, i)];
+}
+
+void launch_add_at_kernel_cpu(auto *tptr, auto *t2ptr, Tensor *t, Tensor *t2, int numel, Tensor *idx) {
+    auto *idxptr = (long *) idx->storage->data;
+    auto numel_idx = idx->numel;
+    #pragma omp parallel for
+    for (int i=0; i < numel_idx; i++)
+        add_at_kernel_cpu(tptr, idxptr, t2ptr, t, idx, t2, i);
+}
+
+void add_at_cpu(Tensor *t, Tensor *idx, Tensor *t2){
+    dispatch(t, t2,
+        [](auto... args){return dispatch_binary_inplace_op(args...);}, 
+        [](auto... args){launch_add_at_kernel_cpu(args...);},
+        idx
+    );
+}
+
+void uniform_kernel_cpu(auto *tptr, Tensor *t, int i, double a, double b) {
+    tptr[i] = a + (b - a) * ((double) rand() / ((double) RAND_MAX + 1.0));
+}
+
+void launch_uniform_kernel_cpu(auto *tptr, Tensor *t, int numel, double a, double b) {
+    #pragma omp parallel for
+    for (int i=0; i < numel; i++)
+        uniform_kernel_cpu(tptr, t, i, a, b);
+}
+
+void uniform_cpu(Tensor *t, double a, double b){
+    dispatch(t,
+        [](auto... args){return dispatch_unary_inplace_op(args...);}, 
+        [](auto... args){launch_uniform_kernel_cpu(args...);},
+        a, b
+    );
+}
+
+
 void maximum_kernel_cpu(auto *tptr, auto *t2ptr, auto *resptr, Tensor *t, Tensor *t2, int i) {
     auto v1 = tptr[storage_idx(t, i)];
     auto v2 = t2ptr[storage_idx(t2, i)];
@@ -322,19 +380,19 @@ Tensor *mul_reduce_cpu(Tensor *t, Tensor *t2, int axis) {
 }
 
 
-void pow_kernel_cpu(auto *tptr, double *resptr, double x, Tensor *t, int i){
+void pow_kernel_cpu(auto *tptr, double *resptr, Tensor *t, int i, double x){
     resptr[i] = pow(tptr[storage_idx(t, i)], x);
 }
 
-void launch_pow_kernel_cpu(auto *tptr, double *resptr, double x, Tensor *t, int numel){
+void launch_pow_kernel_cpu(auto *tptr, double *resptr, Tensor *t, int numel, double x){
     #pragma omp parallel for
     for (int i=0; i < numel; i++)
-        pow_kernel_cpu(tptr, resptr, x, t, i);
+        pow_kernel_cpu(tptr, resptr, t, i, x);
 }
 
 Tensor *pow_cpu(Tensor *t, double x) {
     return dispatch(t,
-        [](auto... args){return dispatch_unary_op_d_xtra(args...);}, 
+        [](auto... args){return dispatch_unary_op_d(args...);},
         [](auto... args){launch_pow_kernel_cpu(args...);},
         x
     );
@@ -409,5 +467,24 @@ Tensor *contiguous_cpu(Tensor *t) {
     return dispatch(t,
         [](auto... args){return dispatch_unary_op(args...);}, 
         [](auto... args){launch_contiguous_kernel_cpu(args...);}
+    );
+}
+
+
+void arange_kernel_cpu(auto *tptr, Tensor *t, int i, int start, int stop, int step){
+    tptr[i] = start + i * step;
+}
+
+void launch_arange_kernel_cpu(auto *tptr, Tensor *t, int numel, int start, int stop, int step){
+    #pragma omp parallel for
+    for (int i=0; i < numel; i++)
+        arange_kernel_cpu(tptr, t, i, start, stop, step);
+}
+
+Tensor *arange_cpu(Tensor *t, int start, int stop, int step) {
+    return dispatch(t,
+        [](auto... args){return dispatch_unary_inplace_op(args...);}, 
+        [](auto... args){launch_arange_kernel_cpu(args...);},
+        start, stop, step
     );
 }

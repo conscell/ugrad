@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "cuda.h"
 #include "dispatch.h"
+#include <curand_kernel.h>
 
 
 void inline checkCudaError() {
@@ -412,6 +413,104 @@ Tensor *mul_cuda(Tensor *t, Tensor *t2) {
 }
 
 
+__global__ void assign_kernel_cuda(auto *tptr, auto *t2ptr, TensorParams *t, TensorParams *t2, int numel) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < numel) {
+        tptr[cu_storage_idx(t, i)] = t2ptr[cu_storage_idx(t2, i)];
+    }
+}
+
+void launch_assign_kernel_cuda(auto *tptr, auto *t2ptr, Tensor *t, Tensor *t2, int numel) {
+    TensorParams *tp = copy_tensor_params(t), *tp2 = copy_tensor_params(t2);
+    int number_of_blocks = (numel + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    
+    assign_kernel_cuda<<<number_of_blocks, THREADS_PER_BLOCK>>>(tptr, t2ptr, tp, tp2, numel);
+    
+    cudaDeviceSynchronize();
+    cudaFree(tp);
+    cudaFree(tp2);
+    checkCudaError();
+}
+
+void assign_cuda(Tensor *t, Tensor *t2) {
+    dispatch(t, t2,
+        [](auto... args){return dispatch_binary_inplace_op(args...);},
+        [](auto... args){launch_assign_kernel_cuda(args...);}
+    );
+}
+
+
+__global__ void add_at_kernel_cuda(long *tptr, long *idxptr, auto *t2ptr, TensorParams *t, TensorParams *idx, TensorParams *t2, int numel) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < numel) {
+#if __LONG_MAX__ == 0x7fffffffffffffffL
+        atomicAdd((unsigned long long *) &tptr[cu_storage_idx(t, idxptr[cu_storage_idx(idx, i)])], (unsigned long long) (long) t2ptr[cu_storage_idx(t2, i)]);
+#elif __LONG_MAX__ == 0x7fffffffL
+        atomicAdd((unsigned int *) &tptr[cu_storage_idx(t, idxptr[cu_storage_idx(idx, i)])], (unsigned int) (int) t2ptr[cu_storage_idx(t2, i)]);
+#endif
+    }
+}
+
+__global__ void add_at_kernel_cuda(double *tptr, auto *idxptr, auto *t2ptr, TensorParams *t, TensorParams *idx, TensorParams *t2, int numel) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < numel) {
+        atomicAdd(&tptr[cu_storage_idx(t, idxptr[cu_storage_idx(idx, i)])], (double) t2ptr[cu_storage_idx(t2, i)]);
+    }
+}
+
+void launch_add_at_kernel_cuda(auto *tptr, auto *t2ptr, Tensor *t, Tensor *t2, int numel, Tensor *idx) {
+    TensorParams *tp = copy_tensor_params(t), *tp2 = copy_tensor_params(t2), *idxp = copy_tensor_params(idx);
+    auto *idxptr = (long *) idx->storage->data;
+    auto numel_idx = idx->numel;
+    int number_of_blocks = (numel_idx + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    
+    add_at_kernel_cuda<<<number_of_blocks, THREADS_PER_BLOCK>>>(tptr, idxptr, t2ptr, tp, idxp, tp2, numel_idx);
+    
+    cudaDeviceSynchronize();
+    cudaFree(tp);
+    cudaFree(tp2);
+    cudaFree(idxp);
+    checkCudaError();
+}
+
+void add_at_cuda(Tensor *t, Tensor *idx, Tensor *t2){
+    dispatch(t, t2,
+        [](auto... args){return dispatch_binary_inplace_op(args...);}, 
+        [](auto... args){launch_add_at_kernel_cuda(args...);},
+        idx
+    );
+}
+
+
+__global__ void uniform_kernel_cuda(auto *tptr, TensorParams *t, int numel, double a, double b) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < numel) {
+        curandState state;
+        curand_init(clock64(), i, 0, &state);
+        tptr[i] = a + (b - a) * ((double) curand(&state) / ((double) UINT_MAX + 1.0));
+    }
+}
+
+void launch_uniform_kernel_cuda(auto *tptr, Tensor *t, int numel, double a, double b) {
+    TensorParams *tp = copy_tensor_params(t);
+    int number_of_blocks = (numel + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+
+    uniform_kernel_cuda<<<number_of_blocks, THREADS_PER_BLOCK>>>(tptr, tp, numel, a, b);
+
+    cudaDeviceSynchronize();
+    cudaFree(tp);
+    checkCudaError();
+}
+
+void uniform_cuda(Tensor *t, double a, double b){
+    dispatch(t,
+        [](auto... args){return dispatch_unary_inplace_op(args...);}, 
+        [](auto... args){launch_uniform_kernel_cuda(args...);},
+        a, b
+    );
+}
+
+
 __global__ void maximum_kernel_cuda(auto *tptr, auto *t2ptr, auto *resptr, TensorParams *t, TensorParams *t2, int numel) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < numel) {
@@ -488,18 +587,18 @@ Tensor *mul_reduce_cuda(Tensor *t, Tensor *t2, int axis) {
 }
 
 
-__global__ void pow_kernel_cuda(auto *tptr, double *resptr, double x, TensorParams *t, int numel) {
+__global__ void pow_kernel_cuda(auto *tptr, double *resptr, TensorParams *t, int numel, double x) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < numel) {
         resptr[i] = pow((double)tptr[cu_storage_idx(t, i)], x);
     }
 }
 
-void launch_pow_kernel_cuda(auto *tptr, double *resptr, double x, Tensor *t, int numel) {
+void launch_pow_kernel_cuda(auto *tptr, double *resptr, Tensor *t, int numel, double x) {
     TensorParams *tp = copy_tensor_params(t);
     int number_of_blocks = (numel + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
-    pow_kernel_cuda<<<number_of_blocks, THREADS_PER_BLOCK>>>(tptr, resptr, x, tp, numel);
+    pow_kernel_cuda<<<number_of_blocks, THREADS_PER_BLOCK>>>(tptr, resptr, tp, numel, x);
 
     cudaDeviceSynchronize();
     cudaFree(tp);
@@ -508,7 +607,7 @@ void launch_pow_kernel_cuda(auto *tptr, double *resptr, double x, Tensor *t, int
 
 Tensor *pow_cuda(Tensor *t, double x) {
     return dispatch(t,
-        [](auto... args){return dispatch_unary_op_d_xtra(args...);}, 
+        [](auto... args){return dispatch_unary_op_d(args...);}, 
         [](auto... args){launch_pow_kernel_cuda(args...);},
         x
     );
@@ -615,5 +714,34 @@ Tensor *contiguous_cuda(Tensor *t) {
     return dispatch(t,
         [](auto... args){return dispatch_unary_op(args...);}, 
         [](auto... args){launch_contiguous_kernel_cuda(args...);}
+    );
+}
+
+
+__global__ void arange_kernel_cuda(auto *tptr, TensorParams *t, int numel, int start, int stop, int step) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < numel) {
+        tptr[i] = start + i * step;
+    }
+}
+
+void launch_arange_kernel_cuda(auto *tptr, Tensor *t, int numel, int start, int stop, int step) {
+    TensorParams *tp = copy_tensor_params(t);
+    int number_of_blocks = (numel + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+
+    if (number_of_blocks > 0){
+        arange_kernel_cuda<<<number_of_blocks, THREADS_PER_BLOCK>>>(tptr, tp, numel, start, stop, step);
+    }
+
+    cudaDeviceSynchronize();
+    cudaFree(tp);
+    checkCudaError();
+}
+
+Tensor *arange_cuda(Tensor *t, int start, int stop, int step) {
+    return dispatch(t,
+        [](auto... args){return dispatch_unary_inplace_op(args...);}, 
+        [](auto... args){launch_arange_kernel_cuda(args...);},
+        start, stop, step
     );
 }

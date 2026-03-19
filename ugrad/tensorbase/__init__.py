@@ -1,1 +1,1 @@
-from .tensorbase import TensorBase
+from .tensorbase import TensorBase, inf

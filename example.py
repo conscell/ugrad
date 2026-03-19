@@ -18,9 +18,10 @@ def main():
     
     X, y = fetch_openml("mnist_784", version=1, return_X_y=True, as_frame=False, parser='liac-arff')
     X, y = shuffle(X, y, random_state=42)
+    y = y.astype(np.int64)
     X = X[:1200]
     y = y[:1200]
-    y = y.astype(np.int64)
+    y = np.eye(10)[y]
     # Scale images to the [0, 1] range
     X /= 255.
 
@@ -28,7 +29,7 @@ def main():
     print(f"{X_train.shape=} {X_test.shape=} {y_train.shape=} {y_test.shape=}")
 
     inputs_t = ugrad.Tensor(X_test)
-    labels_t = ugrad.Tensor(np.eye(10)[y_test])
+    labels_t = ugrad.Tensor(y_test)
     print(f"{labels_t.data[0]=}")
 
     class Model(nn.Module):
@@ -56,7 +57,7 @@ def main():
         train_loss = 0
         for batch in range(num_batches):
             inputs = ugrad.Tensor(X_train[batch * batch_size:(batch + 1) * batch_size])
-            labels = ugrad.Tensor(np.eye(10)[y_train[batch * batch_size:(batch + 1) * batch_size]])
+            labels = ugrad.Tensor(y_train[batch * batch_size:(batch + 1) * batch_size])
 
             # Forward
             preds = model(inputs)

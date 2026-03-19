@@ -4,7 +4,7 @@ from .tensorbase import TensorBase
 class Tensor:
     grad_enabled = True
 
-    def __init__(self, data, name="", requires_grad=False):
+    def __init__(self, data, name="", requires_grad=False, device="cpu"):
         """
         A class representing a tensor object.
         This class provides functionality for tensor operations and gradient computations.
@@ -13,8 +13,10 @@ class Tensor:
             data: The data array or value.
             name: The name of the tensor (optional).
             requires_grad: Whether to compute gradients for this tensor (default: False).
+            device: The device where the tensor will be stored, either 'cpu' or 'cuda' (default: 'cpu').
         """
-        self.data = data if isinstance(data, TensorBase) else TensorBase(data)
+        self.data = data if isinstance(data, TensorBase) else TensorBase(data, device=device)
+        self.device = self.data.device
         self.shape = self.data.shape
         self.name = name
         self.requires_grad = requires_grad
@@ -23,7 +25,21 @@ class Tensor:
                                             next_functions=(), 
                                             name="accum")) if requires_grad and self.grad_enabled 
             else (None, None))
-    
+
+    def to(self, device):
+        """
+        Moves the tensor to the specified device.
+
+        Args:
+            device (str): Target device, either 'cpu' or 'cuda'.
+
+        Returns:
+            Tensor: A new tensor on the specified device if different, otherwise self.
+        """
+        if self.device == device:
+            return self
+        return Tensor(self.data.to(device), name=self.name, requires_grad=self.requires_grad)
+
     def accum_grad(self, grad):
         """ 
         Gradient accumulation function.
@@ -85,6 +101,27 @@ class Tensor:
                                   name=".T")
             result.requires_grad = True
         
+        return result
+
+    def reshape(self, shape):
+        """
+        Reshape the Tensor to the specified shape.
+
+        Args:
+            shape (tuple or int): The desired shape of the output Tensor.
+
+        Returns:
+            A Tensor object with the specified shape.
+        """
+        result = Tensor(self.data.reshape(shape), name="reshape")
+
+        if self.requires_grad and self.grad_enabled:
+            # Define the gradient function for the reshape operation
+            result.grad_fn = Node(grad_fn=lambda grad: (grad.reshape(self.shape), ),
+                                  next_functions=(self.grad_fn, ),
+                                  name="reshape")
+            result.requires_grad = True
+
         return result
 
     def __add__(self, other):
@@ -258,6 +295,7 @@ class Tensor:
         Args:
             dim: The dimension or dimensions to reduce. If None, all dimensions are reduced (optional).
             keepdim: If True the axes which are reduced are left in the result as dimensions with size 1 (default: False).
+        
         Returns:
             The resulting Tensor object representing the sum.
         """
@@ -424,23 +462,51 @@ class Tensor:
         Returns:
             None
         """
-        stack = [(self.grad_fn, gradient if gradient is not None else TensorBase.ones_like(self.data))]
-        visited = []
+        
+        # Toposort
+        
+        #topo = []
+        #visited = set()
+        
+        #def build_topo(grad_fn):
+        #    if grad_fn not in visited and grad_fn is not None:
+        #        visited.add(grad_fn)
+        #        for nxt in grad_fn.next_functions:
+        #            build_topo(nxt)
+        #        topo.append(grad_fn)
+        
+        #build_topo(self.grad_fn)
+
+        topo = []
+        stack, visited = ([(self.grad_fn, iter(self.grad_fn.next_functions))], {self.grad_fn}) if self.grad_fn is not None else ([], set())
+        
         while stack:
-            grad_fn, grad = stack.pop()
-            if not grad_fn:
-                continue
-            next_fns = grad_fn.next_functions
-            res_for_next = grad_fn(grad)
-            if grad_fn.name != "accum":
-                visited.append(grad_fn)
-            if next_fns == ():
-                continue
-            for n, r in zip(next_fns, res_for_next):
-                stack.append((n, r))
+            grad_fn, next_fns = stack[-1]
+            for nxt in next_fns:
+                if nxt not in visited and nxt is not None:
+                    visited.add(nxt)
+                    stack.append((nxt, iter(nxt.next_functions)))
+                    break
+            else:
+                stack.pop()
+                topo.append(grad_fn)
+
+
+        self.grad_fn.grad = gradient if gradient is not None else TensorBase.ones_like(self.data)
+        
+        for grad_fn in reversed(topo):
+            for n, r in zip(grad_fn.next_functions, grad_fn(grad_fn.grad)):
+                if n is not None:
+                    if n.grad is None:
+                        n.grad = r
+                    else:
+                        n.grad += r
+
         if not retain_graph:
             for grad_fn in visited:
-                grad_fn.grad_fn = None
+                grad_fn.grad = None
+                if grad_fn.name != "accum":
+                    grad_fn.grad_fn = None
 
 
 class Node:
@@ -456,6 +522,7 @@ class Node:
             name: The name of the gradient function node (optional).
         """
         self.grad_fn = grad_fn
+        self.grad = None
         self.next_functions = next_functions
         self.name = name
 

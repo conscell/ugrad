@@ -77,7 +77,7 @@ Tensor *dispatch_argmax(auto *tptr, Tensor *t, auto func, int axis){
     return res;
 }
 
-Tensor *dispatch_unary_op(auto*tptr, Tensor *t, auto func){
+Tensor *dispatch_unary_op(auto *tptr, Tensor *t, auto func){
     using restype = std::remove_pointer_t<decltype(tptr)>;
     Tensor *res = create_tensor(create_storage(t->numel * sizeof(restype), t->device), t->shape, t->ndim, type_code(restype{}));
     auto *resptr = (restype *) res->storage->data;
@@ -87,22 +87,19 @@ Tensor *dispatch_unary_op(auto*tptr, Tensor *t, auto func){
     return res;
 }
 
-Tensor *dispatch_unary_op_d(auto *tptr, Tensor *t, auto func){
+Tensor *dispatch_unary_op_d(auto *tptr, Tensor *t, auto func, auto... args){
     Tensor *res = create_tensor(create_storage(t->numel * sizeof(double), t->device), t->shape, t->ndim, type_code(double{}));
     auto *resptr = (double *) res->storage->data;
 
-    func(tptr, resptr, t, res->numel);
+    func(tptr, resptr, t, res->numel, args...);
 
     return res;
 }
 
-Tensor *dispatch_unary_op_d_xtra(auto *tptr, Tensor *t, auto func, double xtra){
-    Tensor *res = create_tensor(create_storage(t->numel * sizeof(double), t->device), t->shape, t->ndim, type_code(double{}));
-    auto *resptr = (double *) res->storage->data;
+Tensor *dispatch_unary_inplace_op(auto *tptr, Tensor *t, auto func, auto... args){
+    func(tptr, t, t->numel, args...);
 
-    func(tptr, resptr, xtra, t, res->numel);
-
-    return res;
+    return t;
 }
 
 Tensor *dispatch_binary_reduce_op(auto *tptr, auto *t2ptr, Tensor *t, Tensor *t2, auto func, int axis) {
@@ -142,4 +139,10 @@ Tensor *dispatch_binary_op_l(auto *tptr, auto *t2ptr, Tensor *t, Tensor *t2, aut
     func(tptr, t2ptr, resptr, t, t2, res->numel);
 
     return res;
+}
+
+Tensor *dispatch_binary_inplace_op(auto *tptr, auto *t2ptr, Tensor *t, Tensor *t2, auto func, auto... args) {
+    func(tptr, t2ptr, t, t2, t->numel, args...);
+
+    return t;
 }
